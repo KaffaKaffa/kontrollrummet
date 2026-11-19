@@ -1,0 +1,564 @@
+{
+  "characters": {
+    "fullstack": {
+      "imageTask": "01a1effa-f32a-7678-9036-8f185668c735",
+      "imageCharged": true,
+      "rigTask": "01a1effc-5490-7663-b145-8457496ee12a",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "android": {
+      "imageTask": "01a1f00e-aaf4-72ae-a308-77f823862525",
+      "imageCharged": true,
+      "rigTask": "01a1f00f-f687-7078-94eb-a7b4c49e95ce",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "architect": {
+      "imageTask": "01a1f010-572d-7337-a861-e82843348493",
+      "imageCharged": true,
+      "rigTask": "01a1f011-dfe1-71f6-8d91-13de5f8f3379",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "backend": {
+      "imageTask": "01a1f012-3656-7190-b0af-d5fdaab6e3a5",
+      "imageCharged": true,
+      "rigTask": "01a1f013-67f4-7462-8d36-4ee9239bb281",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "bug": {
+      "imageTask": "01a1f013-c108-754b-95c6-e21c5f9fcc83",
+      "imageCharged": true,
+      "rigTask": "01a1f014-f3b6-7347-be7b-a6659f6b9e72",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "designer": {
+      "imageTask": "01a1f015-3577-74ac-aae1-a315448bcf18",
+      "imageCharged": true,
+      "rigTask": "01a1f016-967b-7589-b0cc-d0d56f6790c1",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "devops": {
+      "imageTask": "01a1f016-eb8c-775e-a938-fc0fb06f6279",
+      "imageCharged": true,
+      "rigTask": "01a1f017-e3ed-715a-bbf1-0ba62f1257bb",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "docs": {
+      "imageTask": "01a1f018-299d-7077-84c2-17ca3e08d685",
+      "imageCharged": true,
+      "rigTask": "01a1f019-60f0-701f-af72-c496bf11eeeb",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "ios": {
+      "imageTask": "01a1f019-b92a-74e6-9109-f68a8b019fa1",
+      "imageCharged": true,
+      "rigTask": "01a1f01a-c4ba-72aa-8d7a-5a4952843dfe",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "mac": {
+      "imageTask": "01a1f01b-0569-7470-bca6-a5347c7f1105",
+      "imageCharged": true,
+      "rigTask": "01a1f01c-3fac-7275-8825-cb0488991865",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "teamleader": {
+      "imageTask": "01a1f01c-9a58-710c-a63c-423c1d97a0fc",
+      "imageCharged": true,
+      "rigTask": "01a1f01d-a86d-74f9-a8b5-468b3b6c1a98",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "tester": {
+      "imageTask": "01a1f01d-fe0c-73b1-b849-87a955970bcf",
+      "imageCharged": true,
+      "rigTask": "01a1f01f-1c48-769a-a6da-d5e4f07f2b38",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "web": {
+      "imageTask": "01a1f01f-73eb-709d-b2ed-e66f6800c4e9",
+      "imageCharged": true,
+      "rigTask": "01a1f020-e5cd-771a-b82b-c71128ac74e1",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "windows": {
+      "imageTask": "01a1f021-3e26-73c0-af0c-6b537ce215e4",
+      "imageCharged": true,
+      "rigTask": "01a1f022-4742-73bd-a4fb-d23fe4208c68",
+      "rigCharged": true,
+      "rigged": true
+    }
+  },
+  "clips": {
+    "sit_idle": {
+      "id": 33,
+      "task": "01a1effe-05d3-70ef-994a-2b260ed4c294",
+      "index": 0,
+      "file": "library/characters/_clips/batch-01a1effe-05d3-70ef-994a-2b260ed4c294.glb",
+      "charged": true
+    },
+    "sit_idle_f": {
+      "id": 32,
+      "task": "01a1effe-05d3-70ef-994a-2b260ed4c294",
+      "index": 1,
+      "file": "library/characters/_clips/batch-01a1effe-05d3-70ef-994a-2b260ed4c294.glb",
+      "charged": true
+    },
+    "sit_lean": {
+      "id": 356,
+      "task": "01a1effe-05d3-70ef-994a-2b260ed4c294",
+      "index": 2,
+      "file": "library/characters/_clips/batch-01a1effe-05d3-70ef-994a-2b260ed4c294.glb",
+      "charged": true
+    },
+    "sit_arms_crossed": {
+      "id": 364,
+      "task": "01a1effe-05d3-70ef-994a-2b260ed4c294",
+      "index": 3,
+      "file": "library/characters/_clips/batch-01a1effe-05d3-70ef-994a-2b260ed4c294.glb",
+      "charged": true
+    },
+    "sit_sleep": {
+      "id": 263,
+      "task": "01a1effe-05d3-70ef-994a-2b260ed4c294",
+      "index": 4,
+      "file": "library/characters/_clips/batch-01a1effe-05d3-70ef-994a-2b260ed4c294.glb",
+      "charged": true
+    },
+    "sit_doze": {
+      "id": 268,
+      "task": "01a1effe-05d3-70ef-994a-2b260ed4c294",
+      "index": 5,
+      "file": "library/characters/_clips/batch-01a1effe-05d3-70ef-994a-2b260ed4c294.glb",
+      "charged": true
+    },
+    "sit_drink": {
+      "id": 343,
+      "task": "01a1effe-05d3-70ef-994a-2b260ed4c294",
+      "index": 6,
+      "file": "library/characters/_clips/batch-01a1effe-05d3-70ef-994a-2b260ed4c294.glb",
+      "charged": true
+    },
+    "sit_cheer": {
+      "id": 304,
+      "task": "01a1effe-05d3-70ef-994a-2b260ed4c294",
+      "index": 7,
+      "file": "library/characters/_clips/batch-01a1effe-05d3-70ef-994a-2b260ed4c294.glb",
+      "charged": true
+    },
+    "walk": {
+      "id": 30,
+      "task": "01a1effe-05d3-70ef-994a-2b260ed4c294",
+      "index": 8,
+      "file": "library/characters/_clips/batch-01a1effe-05d3-70ef-994a-2b260ed4c294.glb",
+      "charged": true
+    },
+    "walk_phone": {
+      "id": 124,
+      "task": "01a1effe-05d3-70ef-994a-2b260ed4c294",
+      "index": 9,
+      "file": "library/characters/_clips/batch-01a1effe-05d3-70ef-994a-2b260ed4c294.glb",
+      "charged": true
+    },
+    "phone_talk": {
+      "id": 312,
+      "task": "01a1f005-1462-7141-ae19-12a6d49c0c9c",
+      "index": 0,
+      "file": "library/characters/_clips/batch-01a1f005-1462-7141-ae19-12a6d49c0c9c.glb",
+      "charged": true
+    },
+    "stand_drink": {
+      "id": 342,
+      "task": "01a1f005-1462-7141-ae19-12a6d49c0c9c",
+      "index": 1,
+      "file": "library/characters/_clips/batch-01a1f005-1462-7141-ae19-12a6d49c0c9c.glb",
+      "charged": true
+    },
+    "wave": {
+      "id": 28,
+      "task": "01a1f005-1462-7141-ae19-12a6d49c0c9c",
+      "index": 2,
+      "file": "library/characters/_clips/batch-01a1f005-1462-7141-ae19-12a6d49c0c9c.glb",
+      "charged": true
+    },
+    "wave_one": {
+      "id": 290,
+      "task": "01a1f005-1462-7141-ae19-12a6d49c0c9c",
+      "index": 3,
+      "file": "library/characters/_clips/batch-01a1f005-1462-7141-ae19-12a6d49c0c9c.glb",
+      "charged": true
+    },
+    "chat": {
+      "id": 56,
+      "task": "01a1f005-1462-7141-ae19-12a6d49c0c9c",
+      "index": 4,
+      "file": "library/characters/_clips/batch-01a1f005-1462-7141-ae19-12a6d49c0c9c.glb",
+      "charged": true
+    },
+    "talk": {
+      "id": 308,
+      "task": "01a1f005-1462-7141-ae19-12a6d49c0c9c",
+      "index": 5,
+      "file": "library/characters/_clips/batch-01a1f005-1462-7141-ae19-12a6d49c0c9c.glb",
+      "charged": true
+    },
+    "dance": {
+      "id": 22,
+      "task": "01a1f005-1462-7141-ae19-12a6d49c0c9c",
+      "index": 6,
+      "file": "library/characters/_clips/batch-01a1f005-1462-7141-ae19-12a6d49c0c9c.glb",
+      "charged": true
+    },
+    "sit_down": {
+      "id": 57,
+      "task": "01a1f005-1462-7141-ae19-12a6d49c0c9c",
+      "index": 7,
+      "file": "library/characters/_clips/batch-01a1f005-1462-7141-ae19-12a6d49c0c9c.glb",
+      "charged": true
+    },
+    "stand_up": {
+      "id": 53,
+      "task": "01a1f005-1462-7141-ae19-12a6d49c0c9c",
+      "index": 8,
+      "file": "library/characters/_clips/batch-01a1f005-1462-7141-ae19-12a6d49c0c9c.glb",
+      "charged": true
+    },
+    "stand_idle": {
+      "id": 0,
+      "task": "01a1f005-1462-7141-ae19-12a6d49c0c9c",
+      "index": 9,
+      "file": "library/characters/_clips/batch-01a1f005-1462-7141-ae19-12a6d49c0c9c.glb",
+      "charged": true
+    },
+    "scratch": {
+      "id": 36,
+      "task": "01a1f00a-1ee4-76e9-9002-ba786360f06a",
+      "index": 0,
+      "file": "library/characters/_clips/batch-01a1f00a-1ee4-76e9-9002-ba786360f06a.glb",
+      "charged": true
+    },
+    "run": {
+      "id": 14,
+      "task": "01a1f2ca-31a5-7220-97f8-fe3caa7e9701",
+      "index": 0,
+      "file": "library/characters/_clips/batch-01a1f2ca-31a5-7220-97f8-fe3caa7e9701.glb",
+      "charged": true
+    }
+  },
+  "motions": {
+    "sit_type": {
+      "motionTask": "01a1f022-9d36-7776-b272-0720d065e630",
+      "motionCharged": true,
+      "animTask": "01a1f022-e0e1-710e-9bd0-d595c10cde14",
+      "animCharged": true,
+      "file": "library/characters/_clips/sit_type.glb"
+    },
+    "sit_feetup": {
+      "motionTask": "01a1f023-8314-7207-8188-79682048e311",
+      "motionCharged": true,
+      "animTask": "01a1f023-c6c9-714b-8613-63a706ec9340",
+      "animCharged": true,
+      "file": "library/characters/_clips/sit_feetup.glb"
+    },
+    "sit_rock": {
+      "motionTask": "01a1f024-6389-7440-823d-f90703e8abf5",
+      "motionCharged": true,
+      "animTask": "01a1f024-a913-7652-b3fb-03122abc3673",
+      "animCharged": true,
+      "file": "library/characters/_clips/sit_rock.glb"
+    },
+    "sit_raise": {
+      "motionTask": "01a1f025-1c36-72c7-a151-a8a963978778",
+      "motionCharged": true,
+      "animTask": "01a1f025-4c14-75ea-87cf-cc66c8c1a971",
+      "animCharged": true,
+      "file": "library/characters/_clips/sit_raise.glb"
+    },
+    "sit_despair": {
+      "motionTask": "01a1f025-c4d4-776d-b7c3-a851c0b5ada9",
+      "motionCharged": true,
+      "animTask": "01a1f026-1487-7561-8fab-488350e662c1",
+      "animCharged": true,
+      "file": "library/characters/_clips/sit_despair.glb"
+    },
+    "pingpong": {
+      "motionTask": "01a1f026-91b0-75e2-a1c9-fa14c8260c7e",
+      "motionCharged": true,
+      "animTask": "01a1f026-eba4-75e0-8fb3-6b32c133306b",
+      "animCharged": true,
+      "file": "library/characters/_clips/pingpong.glb"
+    },
+    "stretch": {
+      "motionTask": "01a1f027-5f02-762a-973d-2baeabe8f479",
+      "motionCharged": true,
+      "animTask": "01a1f027-8f30-74d1-a764-cfb9104c0df3",
+      "animCharged": true,
+      "file": "library/characters/_clips/stretch.glb"
+    },
+    "water": {
+      "motionTask": "01a1f027-da04-71f0-89ca-02cceb734365",
+      "motionCharged": true,
+      "animTask": "01a1f028-0a80-71bb-85f5-136a28f949d4",
+      "animCharged": true,
+      "file": "library/characters/_clips/water.glb"
+    },
+    "whiteboard": {
+      "motionTask": "01a1f028-68d6-70d6-9f57-6f69230c0251",
+      "motionCharged": true,
+      "animTask": "01a1f028-9811-7535-b697-52247a43f96b",
+      "animCharged": true,
+      "file": "library/characters/_clips/whiteboard.glb"
+    },
+    "test_phones": {
+      "motionTask": "01a1f028-f6cb-7356-b8cf-e77ed8545eb3",
+      "motionCharged": true,
+      "animTask": "01a1f029-278e-7222-b698-cd3899ef41bd",
+      "animCharged": true,
+      "file": "library/characters/_clips/test_phones.glb"
+    }
+  },
+  "spent": 1541,
+  "props": {
+    "office_chair": {
+      "preview": "01a1effc-9838-725b-bb6c-e5fec573eb74",
+      "previewCharged": true,
+      "refine": "01a1effd-4fb4-753d-85a9-d94c4334b2df",
+      "refineCharged": true,
+      "done": true
+    },
+    "desk": {
+      "preview": "01a1f029-9cc2-7630-8076-114b1abebc7f",
+      "previewCharged": true,
+      "refine": "01a1f02a-6572-7260-af3c-f27607b1f7b2",
+      "refineCharged": true,
+      "done": true
+    },
+    "lead_desk": {
+      "preview": "01a1f02a-ec1d-7787-bc3f-397a89e4945c",
+      "previewCharged": true,
+      "refine": "01a1f02c-1b79-712b-8f84-5ef3e0893afc",
+      "refineCharged": true,
+      "done": true
+    },
+    "sofa": {
+      "preview": "01a1f02c-f43d-7561-849e-b6d373138fb1",
+      "previewCharged": true,
+      "refine": "01a1f02d-cfe3-72d9-bef0-6df255ccd00e",
+      "refineCharged": true,
+      "done": true
+    },
+    "coffee_machine": {
+      "preview": "01a1f02e-a8e8-7055-b0f8-12e1c87a9759",
+      "previewCharged": true,
+      "refine": "01a1f02f-7676-75c7-a89c-9308c5ff6a31",
+      "refineCharged": true,
+      "done": true
+    },
+    "bookshelf": {
+      "preview": "01a1f031-d997-7751-b797-60b34c83ddd1",
+      "previewCharged": true,
+      "refine": "01a1f032-8c0f-7309-82bd-b91209722b75",
+      "refineCharged": true,
+      "done": true
+    },
+    "plant_monstera": {
+      "preview": "01a1f033-3acd-77dc-857a-5b4f06363cc6",
+      "previewCharged": true,
+      "refine": "01a1f033-dbd8-7493-86b0-1203c143f1c6",
+      "refineCharged": true,
+      "done": true
+    },
+    "kitchen": {
+      "preview": "01a1f034-4c9a-76dd-9a61-8e552a252836",
+      "previewCharged": true,
+      "refine": "01a1f035-5805-7520-bf46-3f6c2a8e278b",
+      "refineCharged": true,
+      "done": true
+    },
+    "fridge": {
+      "preview": "01a1f035-f0a0-724e-87a7-98cb232c74b9",
+      "previewCharged": true,
+      "refine": "01a1f036-260d-723b-92e6-1a028a123443",
+      "refineCharged": true,
+      "done": true
+    },
+    "water_cooler": {
+      "preview": "01a1f036-aa8d-744f-807b-9e78ac70eec2",
+      "previewCharged": true,
+      "refine": "01a1f036-e038-7020-9db0-824385b3da74",
+      "refineCharged": true,
+      "done": true
+    },
+    "plant_fiddle": {
+      "preview": "01a1f037-4f98-7160-8d1f-b4835f1ee9f5",
+      "previewCharged": true,
+      "refine": "01a1f037-84da-7155-a261-ae0bdbc3295d",
+      "refineCharged": true,
+      "done": true
+    },
+    "plant_snake": {
+      "preview": "01a1f037-f46d-73dd-8d99-bb5cb54b115a",
+      "previewCharged": true,
+      "refine": "01a1f038-33d1-71a2-8a8e-deef84fe5bf7",
+      "refineCharged": true,
+      "done": true
+    },
+    "floor_lamp": {
+      "preview": "01a1f038-bd25-749a-ad23-e020ee9a871c",
+      "previewCharged": true,
+      "refine": "01a1f038-f276-74a9-abf1-ac467f82207b",
+      "refineCharged": true,
+      "done": true
+    },
+    "armchair": {
+      "preview": "01a1f039-4c33-7297-bf7f-f9768de5958f",
+      "previewCharged": true,
+      "refine": "01a1f039-82d8-728e-9122-92ab53d2ab45",
+      "refineCharged": true,
+      "done": true
+    },
+    "bean_bag": {
+      "preview": "01a1f03a-06ab-73b9-a8be-cf3b380aa7e0",
+      "previewCharged": true,
+      "refine": "01a1f03a-465c-7699-b592-f77a471af0ab",
+      "refineCharged": true,
+      "done": true
+    },
+    "whiteboard": {
+      "preview": "01a1f03b-08d9-7624-be90-4f8faba0d12c",
+      "previewCharged": true,
+      "refine": "01a1f03b-3ec2-73b5-8051-73607208fc40",
+      "refineCharged": true,
+      "done": true
+    },
+    "bin": {
+      "preview": "01a1f03b-c3d2-7555-b69d-ed55421322be",
+      "previewCharged": true,
+      "refine": "01a1f03b-fc1a-7478-9cc8-7a1b250aa005",
+      "refineCharged": true,
+      "done": true
+    },
+    "coffee_table": {
+      "preview": "01a1f03c-956e-77f2-8bb6-bf273ed0c1eb",
+      "previewCharged": true,
+      "refine": "01a1f03c-cce6-7250-b512-8192e1d19dff",
+      "refineCharged": true,
+      "done": true
+    },
+    "ws_ios": {
+      "preview": "01a1f03d-3ef6-7361-b8d1-f274c13f14d9",
+      "previewCharged": true,
+      "refine": "01a1f03d-dec0-7065-8a04-4bcda0c83334",
+      "refineCharged": true,
+      "done": true
+    },
+    "ws_mac": {
+      "preview": "01a1f03e-63fa-7033-bb4c-cd169a3b27df",
+      "previewCharged": true,
+      "refine": "01a1f03f-1759-7285-905b-4c7fe41e8f20",
+      "refineCharged": true,
+      "done": true
+    },
+    "ws_backend": {
+      "preview": "01a1f03f-9b82-75c7-a8f2-e97ab5d9afe4",
+      "previewCharged": true,
+      "refine": "01a1f040-5731-779e-ad3f-d11d2432aaab",
+      "refineCharged": true,
+      "done": true
+    },
+    "ws_windows": {
+      "preview": "01a1f040-c5bf-777d-9cd8-e4cb9e6027f4",
+      "previewCharged": true,
+      "refine": "01a1f041-7ed5-761b-9fea-8f8b6572b6f4",
+      "refineCharged": true,
+      "done": true
+    },
+    "ws_android": {
+      "preview": "01a1f042-0593-7664-bbef-316e4e6bd509",
+      "previewCharged": true,
+      "refine": "01a1f042-a451-7409-8051-6b79ed0ba38e",
+      "refineCharged": true,
+      "done": true
+    },
+    "ws_designer": {
+      "preview": "01a1f043-3d89-776e-9414-1abd60cc31df",
+      "previewCharged": true,
+      "refine": "01a1f043-df24-74c6-bf73-5c4e09bc1ef8",
+      "refineCharged": true,
+      "done": true
+    },
+    "ws_web": {
+      "preview": "01a1f044-4f0c-7569-852f-59872472590c",
+      "previewCharged": true,
+      "refine": "01a1f044-ebf4-74e5-bfaf-28c75696a84c",
+      "refineCharged": true,
+      "done": true
+    },
+    "ws_tester": {
+      "preview": "01a1f045-5c1a-744a-9ece-e8c1ea4b640d",
+      "previewCharged": true,
+      "refine": "01a1f046-1191-703d-98d1-1a24d37bbc3a",
+      "refineCharged": true,
+      "done": true
+    },
+    "ws_architect": {
+      "preview": "01a1f046-ab5e-75ff-a71b-cda5606af3b1",
+      "previewCharged": true,
+      "refine": "01a1f047-9be0-72f2-8809-3f29387d38b2",
+      "refineCharged": true,
+      "done": true
+    },
+    "ws_bug": {
+      "preview": "01a1f048-20e0-76f7-bd45-dae183d1982c",
+      "previewCharged": true,
+      "refine": "01a1f048-e7d2-7693-98dd-5891e24f4745",
+      "refineCharged": true,
+      "done": true
+    },
+    "ws_devops": {
+      "preview": "01a1f049-58c0-7392-870c-241028a38363",
+      "previewCharged": true,
+      "refine": "01a1f04a-0da4-76ef-ae79-c288271fcb03",
+      "refineCharged": true,
+      "done": true
+    },
+    "ws_docs": {
+      "preview": "01a1f04a-87d0-7570-b8e9-cf69dbcbda77",
+      "previewCharged": true,
+      "refine": "01a1f04b-5212-721a-b135-9e0c08da7d44",
+      "refineCharged": true,
+      "done": true
+    },
+    "ws_lead": {
+      "preview": "01a1f04b-d661-77a5-b050-977ea20809d0",
+      "previewCharged": true,
+      "refine": "01a1f04c-881e-70e5-8e4b-026c4433c866",
+      "refineCharged": true,
+      "done": true
+    },
+    "ws_fullstack": {
+      "preview": "01a1f04c-f795-72da-9759-94f5f8cb5ba0",
+      "previewCharged": true,
+      "refine": "01a1f04d-8156-7536-8b29-307ed835e3e4",
+      "refineCharged": true,
+      "done": true
+    },
+    "pingpong_table": {
+      "preview": "01a1f04e-2768-72de-aca0-52c81289b0cf",
+      "previewCharged": true,
+      "refine": "01a1f04e-d935-7344-ab90-c7b6efc026e0",
+      "refineCharged": true,
+      "done": true
+    }
+  }
+}

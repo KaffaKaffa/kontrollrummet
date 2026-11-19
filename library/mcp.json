@@ -1,0 +1,37 @@
+{
+  "figma": {
+    "label": "Figma",
+    "note": "Läsa och rita i Figma. Loggas in med OAuth första gången (/mcp i claude).",
+    "auth": "oauth",
+    "suggestWhen": ["designer"],
+    "config": { "type": "http", "url": "https://mcp.figma.com/mcp" }
+  },
+  "playwright": {
+    "label": "Playwright",
+    "note": "Styr en webbläsare: klicka, fyll i, ta skärmdumpar. För testaren på webbappar.",
+    "auth": "none",
+    "suggestWhen": ["tester", "web"],
+    "config": { "type": "stdio", "command": "npx", "args": ["-y", "@playwright/mcp@0.0.84"] }
+  },
+  "sentry": {
+    "label": "Sentry",
+    "note": "Läsa fel och stackspår i Sentry. Loggas in med OAuth.",
+    "auth": "oauth",
+    "suggestWhen": ["bug"],
+    "config": { "type": "http", "url": "https://mcp.sentry.dev/mcp" }
+  },
+  "linear": {
+    "label": "Linear",
+    "note": "Läsa och skapa ärenden i Linear. Loggas in med OAuth.",
+    "auth": "oauth",
+    "suggestWhen": [],
+    "config": { "type": "http", "url": "https://mcp.linear.app/mcp" }
+  },
+  "context7": {
+    "label": "Context7",
+    "note": "Aktuell dokumentation för bibliotek och ramverk, i stället för att gissa API:er.",
+    "auth": "none",
+    "suggestWhen": ["app", "architect"],
+    "config": { "type": "http", "url": "https://mcp.context7.com/mcp" }
+  }
+}

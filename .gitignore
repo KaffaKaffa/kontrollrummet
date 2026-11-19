@@ -1,0 +1,20 @@
+node_modules
+web/dist/
+.DS_Store
+*.log
+# The projects are this machine's own (made with the guide in the app): roles,
+# notes, people, logos. Only the description and the local config's shape are shared.
+teams/*
+!teams/README.md
+!teams/team.local.example.json
+# Portraits are made per project and role.
+web/public/avatars/
+**/.claude/settings.local.json
+# Worktrees for Gudfadern conversations in the control room itself.
+.claude/worktrees/
+# Agents taken off a team; kept so they can be brought back.
+teams/*/roles/.removed/
+# Meshy's raw downloads (several hundred MB): kept on this Mac, since Meshy deletes them after three days.
+# The compressed copies in web/public are what the app uses.
+library/characters/**/*.glb
+library/office/*.glb

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<title>Klipp: mätning</title>
+</head>
+<body>
+<pre id="out">mäter …</pre>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/" } }
+</script>
+<script type="module">
+// Dev tool: where a character's right hand is, frame by frame, in a clip
+// (?clip=pingpong&who=ios). Relative to the character's feet, facing +z.
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+const q = new URLSearchParams(location.search);
+const loader = new GLTFLoader();
+const [model, anims] = await Promise.all([loader.loadAsync(`/characters/${q.get('who') ?? 'ios'}.glb`), loader.loadAsync('/characters/animations.glb')]);
+const scene = model.scene;
+const names = anims.animations.map((c) => `${c.name} ${c.duration.toFixed(2)}`);
+const clip = anims.animations.find((c) => c.name === (q.get('clip') ?? 'pingpong'));
+let hand, rhips;
+scene.traverse((o) => {
+  const n = o.name.replace(/^mixamorig:?/i, '');
+  if (!hand && /right_?hand$/i.test(n)) hand = o;
+  if (!rhips && /^hips$/i.test(n)) rhips = o;
+});
+const mixer = new THREE.AnimationMixer(scene);
+const act = mixer.clipAction(clip);
+act.play();
+const rows = [];
+const v = new THREE.Vector3();
+const qq = new THREE.Quaternion();
+const fwd = new THREE.Vector3();
+for (let t = 0; t <= clip.duration + 1e-6; t += 1 / 30) {
+  act.time = t;
+  mixer.update(0);
+  scene.updateMatrixWorld(true);
+  hand.getWorldPosition(v);
+  hand.getWorldQuaternion(qq);
+  fwd.set(0, 1, 0).applyQuaternion(qq); // the hand bone's length axis
+  const h = rhips.getWorldPosition(new THREE.Vector3());
+  rows.push([t, v.x, v.y, v.z, fwd.x, fwd.y, fwd.z, h.x, h.z].map((n) => +n.toFixed(3)));
+}
+document.getElementById('out').textContent = JSON.stringify({ clips: names, clip: clip.name, duration: clip.duration, rows });
+document.title = 'klar';
+</script>
+</body>
+</html>

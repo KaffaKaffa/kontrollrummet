@@ -1,0 +1,395 @@
+# Kontrollrummet
+
+Ett agentteam för dina repon, som körs lokalt på din Mac.
+
+Varje team arbetar i ett repo. Det har en teamleader, en arkitekt, en bug-agent, en designer, en utvecklare per app och en testare, och alla är vanliga Claude Code-sessioner. Du är projektledare:
+- Du lämnar uppgifter.
+- Teamleadern delar ut dem.
+- Varje kort arbetas i en egen git-worktree och slutar i en PR.
+
+Allt syns på en board, där du kan följa varje uppgift, svara när en agent undrar något och godkänna det som kräver lov.
+
+Kontrollrummet består av:
+- **Kontoret:** boarden och medarbetarna på samma sida. En agents inställningar (modell, instruktioner med mera) öppnas med ett klick. Med **Kontoret 3D** syns teamet som ett kontor i 3D, där varje agent gör det dess kort säger.
+- **Planer:** arkitektens planer, som du genomför, parkerar eller kastar.
+- **Releases:** vilken version av varje app som ligger i test, är på väg och är ute i App Store, Google Play och Microsoft Store. Här finns också knappar för testbuild och prod.
+- **Gudfadern:** din egen Claude utan team, i valfri mapp och på valfritt konto. Här bygger du vidare på kontrollrummet, och den ersätter Claude Code-appen.
+- **Kontrollrummet.app** i Docken, och **skrivbord** som du når från Claude-appen i telefonen via Remote Control.
+
+Allt körs på Macen där repona, Xcode, signeringsnycklarna och simulatorerna finns. Det kräver ingen API-nyckel till Claude, eftersom agenterna använder din vanliga Claude Code-inloggning och prenumeration.
+
+---
+
+## Kom igång
+
+### Det här behöver du
+- macOS med Xcode Command Line Tools, för `swiftc` och `git`.
+- Node 25 eller nyare. Servern använder `node:sqlite` och kör TypeScript direkt.
+- Claude Code (`claude`), inloggat med en prenumeration.
+- `gh`, inloggat mot GitHub. Agenterna pushar och öppnar PR:er med det.
+- Valfritt:
+  - en OpenAI-nyckel för bilder och porträtt
+  - App Store Connect- och Play-nycklar för Releases
+  - Parallels för Windows-tester
+
+### Installera
+
+```
+git clone https://github.com/<ägare>/control-room.git ~/Dev/control-room
+cd ~/Dev/control-room
+npm install
+```
+
+1. **Projekten skapar du i appen** (**+** i toppraden), och de checkas aldrig in. Se [`teams/README.md`](teams/README.md).
+2. **Om du kör Claude Code med en annan profil än standard**, skapa `~/.control-room/env`. Profilen blir standardkontot (se Konton nedan):
+   ```
+   export CLAUDE_CONFIG_DIR="$HOME/.claude-annan-profil"
+   export GH_CONFIG_DIR="$HOME/.claude-annan-profil/gh"
+   ```
+   Agenterna, skrivborden och knappen "Öppna i terminal" ärver profilen. Använder du standardprofilen behövs ingen fil.
+3. **Prova:**
+   ```
+   npm start            # bygger webben och startar på http://127.0.0.1:4317
+   ```
+4. **Installera på riktigt**, så att servern startar vid inloggning och appen hamnar i Docken:
+   ```
+   OPENAI_API_KEY=sk-… npm run install:mac   # nyckeln är valfri och sparas i nyckelringen
+   ```
+5. **Godkänn mappen:** öppna `claude` en gång i `desks/teamleader` och godkänn frågan om att lita på mappen. Annars startar inte skrivborden.
+
+`npm run uninstall:mac` tar bort LaunchAgenten och appen. Data finns kvar i `~/.control-room`.
+
+På Macen är det en enda LaunchAgent, `se.kontrollrummet`: appens egen programfil i bakgrundsläge (`Kontrollrummet --supervise`) kör servern och skrivborden från `~/.control-room/services.json`. Under Inloggningsobjekt och Integritet och säkerhet heter den därför Kontrollrummet, inte node.
+
+#### Windows
+
+Samma sak på Windows 10/11, i PowerShell. Kräver Node 22 (`winget install OpenJS.NodeJS.LTS`), Git och Claude Code.
+
+```
+$env:OPENAI_API_KEY = 'sk-…'   # valfri; sparas krypterad för din användare (DPAPI)
+npm run install:windows
+```
+
+Det bygger `Kontrollrummet.exe` med ikonen (med C#-kompilatorn som finns i Windows) i `%LOCALAPPDATA%\Kontrollrummet`, lägger den i Autostart (`--supervise`: servern och skrivborden, en post "Kontrollrummet" i Aktivitetshanteraren) och i Start-menyn och på skrivbordet (öppnar tavlan i ett eget appfönster i Edge eller Chrome). Inloggningar öppnas i Windows Terminal, och tokens sparas krypterade i `~/.control-room/secrets`. Notiser: klicka på klockan uppe till höger och tillåt dem. `~/.control-room/env` fungerar som på Macen (`NAMN=värde` per rad). `npm run uninstall:windows` tar bort det igen.
+
+---
+
+## Anpassa
+
+Allt som går att anpassa ligger i textfiler. Team och roller läses om vid varje anrop, så ändringar gäller från agentens nästa tur utan omstart. Ändrar du serverkoden behöver servern startas om: menyn i appen → Starta om servern.
+
+### Konton
+
+Ett Claude-konto är en Claude Code-profil: en mapp med egen inloggning, prenumeration, MCP-servrar och skills. `~/.claude` är standardprofilen, och andra profiler är mappar som `~/.claude-privat`, som Claude Code använder med `CLAUDE_CONFIG_DIR`.
+
+- Första gången servern startar hittar den alla `~/.claude*`-profiler och skriver dem till `~/.control-room/accounts.json`: `{ "default": "<id>", "accounts": [{ "id", "name", "claudeConfigDir", "ghConfigDir"? }] }`. Där kan du byta namn eller lägga till fler.
+- Ett team väljer konto med `"account": "<id>"` i `team.local.json`. Utan det används standardkontot.
+- Agenterna, "Öppna i terminal" och `gh` körs som teamets konto. Har profilen en `gh`-mapp används den.
+- Varje konto är en egen prenumeration, så **gränsen för samtidiga agenter och kvotstoppet gäller per konto**. Topbaren visar fönstren för det konto som valt team eller samtal använder.
+- Ett konto som inte är inloggat loggas in från Gudfadern, som öppnar Terminal med `claude /login` och rätt profil.
+
+### Nytt projekt
+
+`+` bredvid teamen öppnar guiden. Den frågar efter det som behövs och fyller i förslag:
+1. **Repot:** en mapp på Macen, en URL att klona, eller ett nytt repo på GitHub eller i Azure DevOps. En mapp läses in direkt (`server/scan.ts`): git-värd och basbranch från origin, vilka appar som finns (webb, backend, iOS, Android, Mac, Windows, infra), och om det redan har `CLAUDE.md`, skills och `.mcp.json`. Ett repo som ska klonas eller skapas får förslag utifrån det du kryssar i att det ska innehålla.
+2. **Namn och Claude-konto.**
+3. **Agenter** från mallarna i `library/roles/`, med föreslagna förkryssade och ägda mappar ifyllda. Ett litet repo får en utvecklare i stället för en per app.
+4. **Skills och instruktioner.** Det projektet redan har listas först, märkt *Finns* och ikryssat: instruktionsfiler som `CLAUDE.md` och `CLAUDE.local.md`, skills och kommandon (`.claude/commands`), i mappen och i varje repo. Instruktionsfilerna läses alltid av Claude Code. En skill eller ett kommando som kryssas ur stängs av för projektets agenter (`"disabledSkills"` i `team.json`, `Skill(<namn>)` i agenternas spärrlista). Nya skills från `library/skills/` är märkta *Ny* och läggs till *lokalt* (kopieras till `.claude/skills/` och hålls utanför git med `.git/info/exclude`) eller *checkas in* (läggs in i en PR). Här skrivs också teamets regler (`shared.md`).
+5. **MCP-servrar** enligt mallarna, till exempel Figma för designern och Playwright för testaren.
+6. **Logga:** ladda upp, eller beskriv den så ritas den med OpenAI.
+7. **Kontroller** (se nedan). För ett befintligt repo måste allt som krävs vara grönt.
+
+Ett första **onboarding-kort** låter teamet läsa in sig: det skriver `CLAUDE.md` om den saknas, checkar in valda skills och sparar anteckningar per roll, i en PR. Gudfadern och skrivborden kan göra samma sak med verktygen `scan_repo` och `create_project`.
+
+### Flera repon i ett projekt
+
+Ett projekt kan vara en mapp med flera repon som hör ihop, som `~/Dev/Kund` med Admin, Store och Web. Välj mappen i guiden, så listas repona under den:
+- **Extra kloner** av samma remote, som `Web-feature-123`, är urkryssade som förval.
+- **Teamleadern, arkitekten och bug** arbetar i mappen och ser alla repon och mappens `CLAUDE.md`.
+- **Agenterna** har `repo:` i sin roll, till exempel `repo: Web, Admin`. Det första repot är agentens eget, och korten får worktree och PR där. Ett kort kan gälla ett annat repo med `repo` i `create_subtask` eller `delegate`. Testkort följer det repo PR:en gjordes i.
+- **Skills som bara finns här** läggs i mappens `.claude/skills/` och länkas in i varje worktree, utanför git.
+- **`team.local.json`** får `"repos": { "Web": "Web", … }` (sökvägar relativt mappen) och `"baseBranches"`. Basbranchen föreslås per repo: `develop` när den finns (GitFlow), annars `origin/HEAD`. Den går att ändra i guiden.
+
+**Azure DevOps i en annan tenant.** `az` har en aktiv inloggning per profil. Är standardinloggningen i `~/.azure` ett annat konto än det som har tillgång till kundens DevOps, kan projektet få en egen profil: "Egen az-profil" under Projektet, eller `"azureConfigDir": "~/.azure-wurth"` i `team.local.json`. Logga in där från kontrollen "Skrivrätt". Agenterna, PR-bevakningen och kontrollerna använder sedan den profilen.
+
+### Projektinställningar
+
+Fliken Inställningar på varje team:
+- **Projektet:** namn, basbranch, Claude-konto och logga (`teams/<id>/logo.png|svg|jpg|webp`).
+- **Kontroller:** Claude-kontot är inloggat, repot och `origin/<basbranch>` finns, `gh` eller `az` är inloggat med skrivrätt, verktygen stacken kräver finns, och agenternas MCP-servrar ansluter. Varje fel har en knapp: en Terminal öppnas med rätt kommando och konto (inloggningar, installationer, `/mcp` för OAuth-servrar), eller så rättas det direkt. "Kontrollera MCP" startar servrarna en gång och kostar ett kort Haiku-svar.
+- **Agenter:** lägg till från mallarna eller ta bort. En agent med kort som inte är klara kan inte tas bort, och borttagna hamnar i `roles/.removed/`. Nya agenter får mallens porträtt tills `scripts/avatars.mjs` gör ett eget.
+- **Skills:** repots skills (incheckade eller bara här), och bibliotekets att lägga till lokalt eller checka in.
+- **MCP-servrar:** vilka som finns och vilka agenter som använder dem.
+
+### MCP per agent
+
+`mcp:` i en roll väljer exakt vilka servrar agenten får: `mcp: figma, playwright`. Agenten startar alltid med `--strict-mcp-config` och bara de servrarna, så den läser inga andra servrars instruktioner. `mcp: all` (eller `true`) ger kontots alla servrar och claude.ai-connectors, vilket kostar mest. Utan `mcp:` finns bara kontrollrummets verktyg.
+
+Servrarna kan komma från fem ställen, och den mest specifika vinner:
+- kontrollrummets bibliotek (`library/mcp.json`),
+- kontots egna,
+- kontots för just det repot,
+- repots `.mcp.json`,
+- `"mcp"` i `team.json`.
+
+OAuth-inloggningar sparas i kontots profil, så en server som Figma ansluter som den redan är inloggad. Hemligheter som en server anger som `${VAR}` läses från nyckelringen vid start: `"secrets": { "VAR": "<nyckelringspost>" }` i `team.local.json`.
+
+### GitHub och Azure DevOps
+
+Git-värden läses från `origin`. PR-bevakningen, Figma-synken och agenternas PR-instruktioner går via `server/git.ts`: `gh` för GitHub och `az repos` för Azure DevOps (kräver tillägget `azure-devops`). Båda körs som teamets konto. Ett konto kan ha egen `az`-konfiguration med `azureConfigDir` i `accounts.json`. Handoff mellan kontrollrum fungerar bara på GitHub.
+
+### Gudfadern
+
+Fliken Gudfadern är en Claude utan team, kort eller roll. Varje samtal har:
+- **Mapp:** hemmappen, kontrollrummet, ett av teamens repon eller valfri mapp. Ett git-repo kan få en egen worktree och branch, `gudfadern/gf-<id>-…`, och det är förvalt för kontrollrummet.
+- **Konto, modell, tankenivå och MCP**, som går att ändra mellan turerna. Byter du konto börjar nästa tur en ny session som får med sig det senaste i samtalet, eftersom en session hör till en profil.
+- **Samma snålhet som korten:** sammanfattning vid 140k, kapade utskrifter, och bara kontrollrummets MCP om du inte väljer "Kontots alla".
+- **Skrivbordets verktyg:** Gudfadern kan lämna uppgifter till team, följa kort och svara på dem. Det auto-läget skulle fråga om visas i samtalet för godkännande.
+- **Ta i bruk:** mergar samtalets branch in i repot det kom från. För kontrollrummet startar servern sedan om, först när inga agenter arbetar, och bygger om webben.
+- **Ny session, Terminal, Bifoga och Arkivera.** Bifogade filer sparas i `~/.control-room/uploads/` och sökvägen skickas med meddelandet.
+
+Ett meddelande du skriver medan Gudfadern arbetar blir nästa tur. Samtal räknas in i kontots gräns, men köar aldrig, eftersom du själv har bett om dem.
+
+### Team
+
+Ett team är en mapp under `teams/`:
+
+```
+teams/<id>/
+  team.json                 delas i repot: appar, butiker, Figma-synk
+  team.local.json           bara din Mac: sökvägar, nycklar, VM:ar (gitignorerad)
+  team.local.example.json   hur den lokala filen ser ut
+  shared.md                 regler som gäller teamets alla roller
+  roles/*.md                en fil per agent
+```
+
+`team.local.json` läggs ovanpå `team.json`. Objekt slås ihop nyckel för nyckel, och för allt annat vinner den lokala filen.
+
+| Fält | Var | Vad |
+|---|---|---|
+| `name` | team.json | Namnet i topbaren |
+| `repo` | local | Checkouten teamet arbetar i. Worktrees hamnar i `<repo>/.claude/worktrees/`. |
+| `account` | local | Claude-kontot agenterna kör på, se Konton |
+| `repos` | local | Flera repon under `repo`: `{ "<id>": "<sökväg>" }` |
+| `azureConfigDir` | local | Projektets egen `az`-profil för Azure DevOps |
+| `mcp` | team.json | Teamets egna MCP-servrar, `{ "<id>": <config> }` |
+| `secrets` | local | Miljövariabler till MCP-servrar, ur nyckelringen |
+| `baseBranch` | team.json | Branchen kort utgår från och PR:er går till (`main`) |
+| `memory` | local | Projektets Claude Code-memory (`MEMORY.md`). En worktree hittar den inte själv, så den pekas ut i prompten. |
+| `owner` | local | Vad agenterna kallar dig, den som kör kontrollrummet. Utelämnat: `handoff.name`, sedan förnamnet på GitHub-kontot som `gh` är inloggat på, sedan inloggningsnamnet. Läses en gång när servern startar. I `shared.md` och rollerna står `{{owner}}` (och genitiv `{{owners}}`) där namnet hamnar. |
+| `figmaSync` | team.json | Sökvägar där mergade ändringar ger designern ett "synka Figma"-kort |
+| `releases.apps` | team.json | Store-apparna, se Releases nedan |
+| `releases.appStoreConnect`, `releases.play` | local | Var nycklarna finns |
+| `vms` | local | Virtuella maskiner som agenterna får be om att starta |
+
+Ett nytt team skapas enklast med guiden (`+` i topbaren), men det är bara en ny mapp och går lika bra att skriva för hand. Topbaren visar teamen med logga och antal kort som väntar på dig.
+
+### Roller
+
+En roll är en fil i `teams/<id>/roles/`:
+
+```
+---
+name: Backend
+kind: app                 # lead | architect | bug | tester | designer | app
+vibe: Hoodie och tre skärmar. Rollens stereotyp, till porträttet och kontoret.
+look: Man i 30-årsåldern, lockigt hår, rutig skjorta   # valfri: utseendet, till porträtt och 3D-gubbe
+character: backend        # valfri: vilken 3D-gubbe rollen använder (standard: mallen med samma id)
+title: En rad om vad agenten gör
+model: opus               # opus | sonnet | haiku | ett fullt modellnamn
+wakeModel: sonnet         # valfri: billigare modell för uppföljningsturer
+context: 140000           # valfri: hur stort samtalet får bli innan det sammanfattas
+effort: medium            # valfri: tankenivå (low | medium | high | xhigh); väckningar kör alltid low
+mcp: figma, playwright    # valfri: MCP-servrar agenten får, eller all för kontots alla; annars bara kontrollrummets
+owns: backend/, infra/    # tomt = hela repot
+repo: Web, Admin          # valfri, med flera repon: de agenten arbetar i, sitt eget först
+worktree: true            # egen worktree och branch per kort
+permission: auto          # auto (standard) | manual: allt som kräver lov går till Inkorgen
+---
+Rollens instruktioner, som läggs till Claude Codes systemprompt.
+```
+
+Allt detta går också att redigera i Kontoret. Klicka på en agent, så skrivs ändringarna tillbaka till filen.
+
+`kind` avgör vad en agent får göra:
+- **lead:** delar ut kort, följer upp, kör standup och äger boarden.
+- **architect:** tar fram planer som hamnar under Planer.
+- **bug:** triagerar fyndlistor till kort.
+- **tester:** verifierar PR:er på riktiga enheter och visar skärmdumpar.
+- **designer:** arbetar i Figma och kan generera illustrationer.
+- **app:** bygger.
+
+Lead, architect och bug kan inte redigera filer. De delar ut arbetet istället för att göra det.
+
+Prompten byggs i den här ordningen: `shared.md` i roten (gäller alla team), teamets `shared.md`, rollen, teamlistan, kontrollrummets verktyg och sist kortet.
+
+### Modeller och kostnad
+- Agenterna kör på din prenumeration och delar på dess gränser. Topbaren visar 5-timmars- och veckofönstret.
+- Högst 2 agenter per Claude-konto arbetar samtidigt, väckningar och Gudfaderns samtal inräknade: en bevakare, ett testkort eller en konflikt som väcks när platserna är upptagna ställer sig i kön med sitt meddelande. Bara det du själv skriver till ett kort går förbi. Det ändras med `CONTROL_ROOM_MAX_AGENTS`.
+- Föräldrar väcks bara när ett kort behöver ett beslut eller misslyckas, och annars när alla deras kort är klara, i ett samlat meddelande. Standupen körs bara när något har stått stilla i över två timmar, och annars högst var sjätte timme.
+- `wakeModel` är den största besparingen. Teamleadern planerar med Opus men följer upp sina kort och kör standup med Sonnet.
+- **Sammanhanget hålls nere.** Varje steg läser om hela samtalet, så ett långt kort kostar mer per steg ju längre det pågår. Sonnet och Opus har annars en miljon tokens innan de sammanfattar, och ett designkort hann växa till 220k och ta en tredjedel av ett femtimmarsfönster på en timme. Därför:
+  - Varje agent sammanfattar sitt samtal när det närmar sig `context` (standard 140k, `CLAUDE_CODE_AUTO_COMPACT_WINDOW`).
+  - Väcks ett kort, till exempel en bevakare eller teamleaderns standup, och samtalet är större än 70k, börjar det i en ny session med briefen och senaste läget i stället för att läsa om allt.
+  - Bash-utskrifter kapas vid 15 000 tecken och MCP-svar vid 10 000 tokens.
+  - Varje agent får bara sina valda MCP-servrar, med `--strict-mcp-config`, och slipper läsa andra servrars instruktioner vid varje steg. Bara `mcp: all` ger kontots alla.
+  - Väckningar körs med `--effort low`: de läser ett läge och reagerar, de behöver inte tänka länge.
+  - Kortet visar hur stort samtalet är ("82k sammanhang").
+- Tar kvoten slut får korten status *Kvotstopp*. Kön pausas till återställningen, och sedan fortsätter de av sig själva.
+
+### Anteckningar per roll
+`teams/<id>/notes/<roll>.md` är det en roll har lärt sig i repot: kommandon som fungerar, fallgropar och var saker ligger. Filen läggs in i varje nytt korts prompt, så att agenten inte börjar från noll, och agenterna fyller på den själva med `save_note`. Läs och rensa filen ibland. Den checkas in, så att andra som kör samma team får samma kunskap.
+
+### Porträtt och utseende
+- `node scripts/avatars.mjs` genererar ett porträtt per mall i `library/roles` med OpenAI, utifrån `look` och `vibe`, till `library/avatars/<id>.png`. Skriptet gör bara de som saknas. `--force` gör om, `--body` gör också en helkroppsbild till 3D-gubben, `--sync` kopierar porträtten till teamens roller (`web/public/avatars/<team>-<roll>.png`), och `--prompts` skriver bara ut promptarna.
+
+### Kontoret i 3D
+Växeln **Skrivbord | Kontoret 3D** överst i Kontoret visar teamet som ett kontor. Den som jobbar sitter och skriver vid sitt skrivbord, den som väntar på dig räcker upp handen, den som bevakar lägger upp fötterna och kastar pappersbollar, och den som är ledig spelar pingis, hämtar kaffe, sitter i soffan och så vidare. Teamleadern går runt med headset och går fram till den som får ett nytt kort. Klicka på en gubbe för att öppna kortet.
+
+Gubbar, animationer och inredning görs med [Meshy](https://www.meshy.ai) (API-nyckel i nyckelringen: `security add-generic-password -U -s control-room-meshy -a meshy -w`, i en vanlig terminal):
+
+- `node scripts/characters.mjs balance` visar krediterna, och `library [sök]` listar Meshys animationsbibliotek (gratis).
+- `models [id …]` gör 3D-gubbar från kroppsbilderna (35 krediter styck), `animations` gör klippen på en gemensam mixamo-rigg (3 per klipp, 13 per egen rörelse), `props [id …]` gör inredningen i `web/src/office3d/catalog.json` och `art` tavlorna (OpenAI).
+- `build` krymper texturerna och lägger allt i `web/public/characters` och `web/public/office`. Kontoret läser filerna direkt, utan omstart.
+- Allt är idempotent och sparas i `library/characters/manifest.json`. `--max-credits` (standard 700) stoppar en körning innan den passerar taket, och `--dry` visar vad som skulle göras.
+- Saknas en modell används en enkel gubbe eller möbel byggd i kod. `?gubbe=<id>` i adressen visar alla som en viss gubbe, för att granska en ny modell.
+- Pingisbordet är byggt i kod med tävlingsmått. Spelarnas slag och bollen går på samma klocka, och ibland blir det rundpingis med upp till sju. `?pingis=<antal>` i adressen startar en match direkt och zoomar in på bordet. `/office/measure.html?clip=<klipp>` visar var handen är i ett klipp, bild för bild (så mättes slaget).
+- UI:t använder Bandclouds design-tokens, kopierade till `web/src/tokens.css`. `npm run tokens:sync` hämtar en ny kopia, och sökvägen sätts med `TOKENS_CSS`.
+
+### Skrivborden i Claude-appen
+- `desks/teamleader` och `desks/architect` är Remote Control-sessioner. I Claude-appen heter de "Kontrollrummet · Teamleader" och "Kontrollrummet · Arkitekt", och de agerar som du på boarden.
+- `desks/gudfadern` är Gudfadern i telefonen, med ett skrivbord per konto ("Kontrollrummet · Gudfadern (Privat)"), eftersom en Remote Control-session hör till en inloggning. `npm run install:mac` lägger till ett per konto i `accounts.json`. Mappen måste vara betrodd med varje kontos profil.
+- Deras uppdrag står i `desks/<namn>/CLAUDE.md`. Modellen står i `desks/<namn>/.claude/settings.json` och är Sonnet, eftersom skrivborden bara skickar vidare och arbetet görs på boarden.
+- Ett nytt skrivbord är en ny mapp med samma tre filer, plus en rad i `scripts/run-desk.sh` och `scripts/install-mac.sh`.
+
+### Releases och deploy
+
+Varje app i `releases.apps` får ett kort i Releases:
+
+| `store` | Läser | Deploy |
+|---|---|---|
+| `appstore` | TestFlight och App Store via App Store Connect-API:t (`bundleId`, `platform`: `IOS` eller `MAC_OS`) | Testbuild via releaseskriptet. Prod skickas till granskning med manuell release, och sedan finns en Släpp-knapp. |
+| `play` | Spåren i Google Play (`packageName`) | Testbuild via releaseskriptet. Prod promotar intern testning till produktion. |
+| `msstore` | Versionen i Microsoft Store från den publika katalogen (`productId`), pågående inskickning från Partner Center och senast byggda MSIX | Testbuild bygger MSIX:en på en Windows-VM (`deploy.test.msixVm`). Prod skapar en inskickning med paketet och nyheterna och skickar den till certifiering. |
+| `manual` | Versionen i repot | Manuellt |
+
+Exempel på deploy för en app:
+
+```json
+"deploy": {
+  "test": { "label": "till TestFlight", "cwd": "native", "run": ["npm", "run", "release:ios"],
+            "install": ["npm", "ci"], "lockfile": "native/package-lock.json" },
+  "prod": true
+}
+```
+
+- **Testbuild** körs i en egen worktree, `cr-release`, som alltid är en ren `origin/<basbranch>`.
+- **Prod** startar bara från bekräftelsedialogen. Agenterna är spärrade från releaseskripten.
+
+**Microsoft Store** kräver en Entra-app som är tillagd som Hanterare i Partner Center (Användarhantering → Microsoft Entra-program), efter att organisationens tenant kopplats under Kontoinställningar → Klientorganisationer. Lägg `{"tenantId", "clientId", "clientSecret"}` som JSON i en nyckelringspost och ange den i `team.local.json`:
+
+```json
+"releases": { "msStore": { "keychainService": "control-room-msstore" } }
+```
+
+Windows-testbuilden skickar `desktop/` från `origin/<basbranch>` som `git archive` till VM:en, kör `release.ps1 -Msix` och hämtar tillbaka paketet till `~/.control-room/builds/<team>/<app>/`. VM:en låses under bygget och pausas igen om jobbet väckte den. Store kräver ett högre versionsnummer än det som är ute, och prod-dialogen säger till om det inte är höjt.
+
+### Felkoll i prod
+
+Kontrollrummet kan läsa nya fel från Sentry (apparna) och Application Insights (backend) var 30:e minut. Allt som är nytt sedan förra kollen blir **ett** kort hos Bug-agenten, aldrig ett per fel. Själva kollen kostar inga tokens. En agent startar först när det finns något nytt. Första kollen kommer bara ihåg det som redan finns.
+
+```json
+"monitors": {
+  "sentry": { "org": "<organisation>", "project": "<projekt>" },
+  "appInsights": { "appId": "<app id>", "subscription": "<prenumeration>", "name": "<resursnamn>" },
+  "everyMinutes": 30
+}
+```
+
+- **Sentry** läses med Sentrys CLI (`sentry`, inloggat, i `~/.local/bin`).
+- **Application Insights** läses med `az`-token för prenumerationen. Kollen hämtar undantag per problem och serverfel (5xx) per anrop, för senaste dygnet.
+
+Lägg inställningen i `team.local.json`, eftersom den gäller din dator och din inloggning.
+
+### Prata med ett annat kontrollrum
+
+Två kontrollrum pratar med varandra via GitHub-issues i teamets repo, så det behövs ingen öppning mot nätet:
+
+```json
+"handoff": { "label": "kontrollrum:anna", "name": "Anna", "peers": { "erik": "kontrollrum:erik" } }
+```
+
+- **Ta emot:** en öppen issue med din etikett blir en uppgift hos din teamleader. Den kan komma från det andra kontrollrummet eller från någon som skapar den för hand på GitHub. Issuen får svaret "Mottaget", och när kortet är klart skrivs sammanfattningen som svar och issuen stängs.
+- **Skicka:** teamleadern och arkitekten har verktyget `ask_peer`. Det skapar en issue med mottagarens etikett. Kortet som frågade väcks när mottagaren svarar eller stänger issuen. Med `reply_peer` svarar de i en tråd.
+- **Markering:** varje kommentar bär en osynlig markering med rummets namn, så att inget kontrollrum svarar sig självt.
+- **Kostnad:** kollen sker med `gh` var tredje minut och kostar inga tokens.
+
+Båda måste ha varandras etiketter i `peers`, och båda behöver skrivrätt i repot.
+
+### Länkar i agenternas text
+
+- **Figma-länkar** visas som en bricka med Figma-loggan och namnet.
+- **Länkar till GitHub-PR:er och issues** visas som "PR #123".
+- **Andra länkar** är vanliga länkar.
+
+Figma-brickan visar filens och ramens riktiga namn om servern har en personlig token från Figma. Skapa den under Figma › Settings › Security › Personal access tokens, med läsrätt till filinnehåll. Kopiera den och lägg den i nyckelringen:
+
+```sh
+security add-generic-password -s control-room-figma -a figma -w "$(pbpaste)"
+```
+
+Utan token visas namnet ur länken. Servern kommer ihåg varje namn, så varje länk kostar ett enda anrop.
+
+### Virtuella maskiner
+
+```json
+"vms": { "parallels-vm": { "name": "Windows 11", "bundle": "~/Parallels/Windows 11.pvm",
+         "sshHost": "<vm:ens ip>", "sshUser": "…", "sshKey": "~/.ssh/…" } }
+```
+
+Testaren och utvecklarna kan be om att få starta VM:en med `start_vm`. Frågan går till Inkorgen. Efter ett ja väcks VM:en, servern väntar på SSH och låser den åt kortet. Var det kortet som startade den, pausas den igen när kortet är klart. SSH-kommandot läggs in i agentens prompt.
+
+---
+
+## Så fungerar det
+
+- **En uppgift blir kort.** Varje kort har en agent, en worktree `<repo>/.claude/worktrees/cr-<id>-…` och en branch `feature/cr-<id>-…`. Den som skapar ett kort blir dess förälder och väcks med ett samlat meddelande när korten blir klara, misslyckas, öppnar PR eller behöver ett beslut.
+- **Beroenden:** ett kort med `depends_on` startar först när de korten är klara. Ett kort med PR blir klart när PR:en mergas, och servern kollar med `gh pr view`.
+- **Agenterna** körs som `claude -p` i stream-json-läge, en tur per process. Samtalet fortsätter med `--resume`. Det du skriver medan agenten arbetar blir nästa tur. Kort som arbetar när servern startas om fortsätter där de var.
+- **Kontrollrummets verktyg:** varje agentprocess kopplas till serverns MCP-endpoint (`/mcp`) med en egen token, så den kan bara agera som sitt eget kort och inom sitt team. Verktygen är:
+  - `report`, `create_subtask`, `delegate`, `request_test`
+  - `list_board`, `get_subtask`, `update_subtask`, `reply_to_card`, `notify_user`
+  - `save_plan`
+  - `acquire_resource`, `release_resource`, `start_vm`
+  - `generate_image`, `show_image`
+- **Godkännanden:** det auto-läget skulle fråga om går till Inkorgen. Obesvarat är nej efter 30 minuter.
+- **Standup:** teamleaderns stående kort "Boarden" väcks var 30:e minut när något har ändrats eller stannat upp, och annars högst var sjätte timme.
+- **Synkvakten** tittar var tionde minut på mergade PR:er som rör `figmaSync`.
+- **Worktrees** läggs i `<repo>/.claude/worktrees/` och hålls utanför git av kontrollrummet själv, med repots egen lista `.git/info/exclude` som aldrig checkas in. `.gitignore` rörs inte.
+- **Tillstånd** ligger i `~/.control-room/` (`state.db`, bilder, loggar, desk-token) och checkas aldrig in.
+
+## Säkerhet
+- Servern binder bara till `127.0.0.1` och nekar andra `Host`, mot DNS-rebinding.
+- POST, PUT och WebSocketen kräver rätt `Origin`, så en annan webbsida kan inte styra agenterna.
+- **Spärrlistan:** agenterna är spärrade från releaseskript, deployskript, `gh workflow run`, Azure-deploy och `gh pr merge`. Listan matchar mönster och är inte vattentät, eftersom agenterna kör på din Mac med dina nycklar. Den andra spärren är auto-lägets egen bedömning.
+- Agenterna pushar och öppnar PR:er i ditt namn via `gh`.
+- **Nycklar:** OpenAI-nyckeln ligger i nyckelringen (`control-room-openai`). Store-nycklarna ligger där `team.local.json` pekar. Inget av det finns i repot.
+
+## Felsökning
+- **Loggar** finns i `~/.control-room/logs/` (`server.log`, `desk-*.log`).
+- **"Workspace not trusted" i en desk-logg:** öppna `claude`, med samma profil som i `~/.control-room/env`, i `desks/teamleader` och godkänn.
+- **Ett kort som står still:** öppna det och skriv till agenten, eller tryck **Terminal** för att ta över med `claude --resume` i dess worktree.
+- **Starta om allt:** menyn i Kontrollrummet.app, eller `launchctl kickstart -k gui/$(id -u)/se.kontrollrummet.server`.
+
+## Utveckla kontrollrummet
+
+```
+npm run dev          # servern med omstart + Vite på http://localhost:5173
+npm run typecheck
+```
+
+- `server/`: Node, HTTP, WebSocket och MCP, utan ramverk.
+- `web/`: Vite och React.
+- `mac/`: Swift-appen, byggd med `mac/build.sh`.
+- `scripts/`: start, installation, porträtt och 3D-gubbar.
+- `web/src/office3d/`: Kontoret i 3D (scen, planlösning, beteenden, gubbar och möbler).
