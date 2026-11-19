@@ -1,0 +1,88 @@
+{
+  "owner": "<Ditt förnamn>",
+  "repo": "~/Dev/<projekt>",
+  "memory": "~/.claude/projects/-Users-<du>-Dev-<projekt>/memory/MEMORY.md",
+  "releases": {
+    "appStoreConnect": {
+      "keyId": "<nyckel-id>",
+      "issuerId": "<issuer-id>",
+      "keyPath": "~/.appstoreconnect/private_keys/AuthKey_<nyckel-id>.p8"
+    },
+    "play": {
+      "keychainService": "<nyckelringspost med tjänstekontots JSON i base64>"
+    },
+    "msStore": {
+      "keychainService": "<nyckelringspost med Entra-appens {tenantId, clientId, clientSecret}>"
+    }
+  },
+  "vms": {
+    "parallels-vm": {
+      "name": "Windows 11",
+      "bundle": "~/Parallels/Windows 11.pvm",
+      "sshHost": "<vm:ens ip>",
+      "sshUser": "<windows-användare>",
+      "sshKey": "~/.ssh/<nyckel>",
+      "sshHostKeyAlias": "<alias>"
+    }
+  },
+  "handoff": {
+    "label": "kontrollrum:<ditt namn>",
+    "name": "<Ditt namn>",
+    "peers": {
+      "<den andres namn>": "kontrollrum:<den andres namn>"
+    }
+  },
+  "account": "<id ur ~/.control-room/accounts.json; utelämnas för standardkontot>",
+  "azureConfigDir": "~/.azure-<projekt>  (bara för Azure DevOps; en egen az-profil per projekt)",
+  "infraItems": [
+    {
+      "id": "firebase",
+      "title": "Firebase <projekt-id>",
+      "kind": "google",
+      "facts": {
+        "projekt": "<projekt-id>",
+        "konto": "<google-konto>"
+      },
+      "notes": "Ange alltid --project och --account.",
+      "env": {
+        "CLOUDSDK_CORE_ACCOUNT": "<google-konto>",
+        "CLOUDSDK_CORE_PROJECT": "<projekt-id>"
+      },
+      "login": {
+        "steps": [
+          [
+            "firebase",
+            "login:add",
+            "<google-konto>"
+          ]
+        ]
+      },
+      "check": {
+        "command": [
+          "firebase",
+          "projects:list",
+          "--json",
+          "--account",
+          "<google-konto>"
+        ]
+      }
+    },
+    {
+      "id": "sentry",
+      "title": "Sentry",
+      "kind": "sentry",
+      "facts": {
+        "organisation": "<org>",
+        "projekt": "<projekt>"
+      },
+      "monitor": {
+        "type": "sentry",
+        "org": "<org>",
+        "project": "<projekt>"
+      }
+    }
+  ],
+  "monitors": {
+    "everyMinutes": 30
+  }
+}

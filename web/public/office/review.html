@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<title>Inredning: granskning</title>
+<style>
+  body { font: 13px system-ui; background: #f3efe9; color: #222; margin: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+  .cell { background: #fff; border-radius: 8px; padding: 8px; }
+  .cell img { width: 160px; height: 160px; background: #e8e4dc; border-radius: 4px; }
+  .cell b { display: block; margin-bottom: 4px; }
+  .dims { color: #666; }
+</style>
+</head>
+<body>
+<h3>Inredning: framifrån (+Z) och ovanifrån, i katalogens storlek</h3>
+<div class="grid" id="grid"></div>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+const index = await fetch('/office/index.json').then((r) => r.json());
+const only = new URLSearchParams(location.search).get('only');
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(320, 320);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const loader = new GLTFLoader();
+const grid = document.getElementById('grid');
+for (const id of index.props.filter((p) => !only || only.split(',').includes(p))) {
+  const gltf = await loader.loadAsync(`/office/${id}.glb`);
+  const o = gltf.scene;
+  const box = new THREE.Box3().setFromObject(o);
+  const size = box.getSize(new THREE.Vector3());
+  const c = box.getCenter(new THREE.Vector3());
+  o.position.sub(new THREE.Vector3(c.x, box.min.y, c.z));
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color('#e8e4dc');
+  scene.add(new THREE.HemisphereLight('#ffffff', '#886', 2.2));
+  const sun = new THREE.DirectionalLight('#fff', 2);
+  sun.position.set(2, 4, 3);
+  scene.add(sun, o);
+  // A 1 m red line along +Z: the side the office treats as the front.
+  const r = Math.max(size.x, size.y, size.z);
+  const arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0.01, 0), r * 0.9, 0xd03030, r * 0.12, r * 0.06);
+  scene.add(arrow);
+  const shots = [];
+  for (const [pos, up] of [[[0.35, 0.45, 1], [0, 1, 0]], [[0, 1.6, 0.001], [0, 0, -1]]]) {
+    const cam = new THREE.PerspectiveCamera(30, 1, 0.01, 100);
+    cam.up.set(...up);
+    cam.position.set(...pos).normalize().multiplyScalar(r * 2.6).add(new THREE.Vector3(0, size.y / 2, 0));
+    cam.lookAt(0, size.y / 2, 0);
+    renderer.render(scene, cam);
+    shots.push(renderer.domElement.toDataURL('image/jpeg', 0.85));
+  }
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  cell.innerHTML = `<b>${id}</b><img src="${shots[0]}"> <img src="${shots[1]}"><div class="dims">B×H×D ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)} (proportioner ${(size.x / size.z).toFixed(2)} : 1)</div>`;
+  grid.append(cell);
+}
+document.title = 'klar';
+</script>
+</body>
+</html>

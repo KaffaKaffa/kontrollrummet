@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "kontrollrummet": {
+      "type": "http",
+      "url": "http://127.0.0.1:4317/mcp/desk",
+      "headers": { "Authorization": "Bearer ${CONTROL_ROOM_DESK_TOKEN}" }
+    }
+  }
+}

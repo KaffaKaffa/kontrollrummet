@@ -1,0 +1,8 @@
+{
+  "review-pr": { "label": "Granska innan PR", "suggestWhen": ["always"] },
+  "pr-description": { "label": "PR-beskrivning", "suggestWhen": ["always"] },
+  "test-first": { "label": "Test först vid buggar", "suggestWhen": ["tests"] },
+  "a11y-check": { "label": "Tillgänglighet", "suggestWhen": ["web", "ios", "android"] },
+  "release-notes": { "label": "Release notes", "suggestWhen": ["ios", "android", "mac", "windows"] },
+  "safe-upgrade": { "label": "Säker uppgradering", "suggestWhen": [] }
+}

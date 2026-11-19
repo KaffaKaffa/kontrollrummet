@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="sv" translate="no">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Kontrollrummet</title>
+    <!-- A Swedish board, not a page to translate: Edge and Chrome otherwise offer to. -->
+    <meta name="google" content="notranslate" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+    <script>
+      // The stored theme before the first paint; theme.tsx keeps it in step after that.
+      try {
+        const theme = localStorage.getItem('kontrollrummet.theme');
+        const dark = theme === 'dark' || (theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

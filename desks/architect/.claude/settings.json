@@ -1,0 +1,11 @@
+{
+  "model": "sonnet",
+  "enabledMcpjsonServers": [
+    "kontrollrummet"
+  ],
+  "permissions": {
+    "allow": [
+      "mcp__kontrollrummet"
+    ]
+  }
+}
