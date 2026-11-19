@@ -1,6 +1,6 @@
 # Kontrollrummet
 
-Ett agentteam för dina repon, som körs lokalt på din Mac.
+Ett agentteam av Claude Code-agenter för dina repon, på din egen dator: macOS eller Windows.
 
 Varje team arbetar i ett repo. Det har en teamleader, en arkitekt, en bug-agent, en designer, en utvecklare per app och en testare, och alla är vanliga Claude Code-sessioner. Du är projektledare:
 - Du lämnar uppgifter.
@@ -14,63 +14,70 @@ Kontrollrummet består av:
 - **Planer:** arkitektens planer, som du genomför, parkerar eller kastar.
 - **Releases:** vilken version av varje app som ligger i test, är på väg och är ute i App Store, Google Play och Microsoft Store. Här finns också knappar för testbuild och prod.
 - **Gudfadern:** din egen Claude utan team, i valfri mapp och på valfritt konto. Här bygger du vidare på kontrollrummet, och den ersätter Claude Code-appen.
-- **Kontrollrummet.app** i Docken, och **skrivbord** som du når från Claude-appen i telefonen via Remote Control.
+- **Inkorgen:** det som väntar på dig, som beslut, godkännanden, PR:er att merga och PR:er att granska. En PR som du ombetts granska kan du ge till teamleadern med ett klick.
+- **Infrastruktur och loggning:** var varje projekt körs (moln, konton, resurser) och var felen läses, identifierat av en agent och redigerbart.
+- **En egen app**, Kontrollrummet.app på Macen och Kontrollrummet.exe på Windows, med systemnotiser när något är klart eller behöver dig. **Skrivborden** når du från Claude-appen i telefonen via Remote Control.
 
-Allt körs på Macen där repona, Xcode, signeringsnycklarna och simulatorerna finns. Det kräver ingen API-nyckel till Claude, eftersom agenterna använder din vanliga Claude Code-inloggning och prenumeration.
+Allt körs på datorn där repona, verktygen och nycklarna finns, och på Macen även Xcode, signeringen och simulatorerna. Det kräver ingen API-nyckel till Claude, eftersom agenterna använder din vanliga Claude Code-inloggning och prenumeration.
 
 ---
 
 ## Kom igång
 
-### Det här behöver du
-- macOS med Xcode Command Line Tools, för `swiftc` och `git`.
-- Node 25 eller nyare. Servern använder `node:sqlite` och kör TypeScript direkt.
-- Claude Code (`claude`), inloggat med en prenumeration.
-- `gh`, inloggat mot GitHub. Agenterna pushar och öppnar PR:er med det.
-- Valfritt:
-  - en OpenAI-nyckel för bilder och porträtt
-  - App Store Connect- och Play-nycklar för Releases
-  - Parallels för Windows-tester
+### Låt din Claude sätta upp det
 
-### Installera
+Klistra in det här i Claude Code (i en terminal, på datorn där Kontrollrummet ska köras):
 
 ```
-git clone https://github.com/<ägare>/control-room.git ~/Dev/control-room
-cd ~/Dev/control-room
+Sätt upp Kontrollrummet åt mig: klona https://github.com/KaffaKaffa/kontrollrummet och följ SETUP.md i repot, steg för steg. Fråga mig bara det du inte kan ta reda på själv.
+```
+
+Claude kontrollerar och installerar det som saknas, installerar Kontrollrummet med app och autostart, och skapar ditt första projekt från ett repo du pekar ut. Det du behöver göra själv är att logga in där ett terminalfönster ber om det. [`SETUP.md`](SETUP.md) visar exakt vad som händer.
+
+### Det här behöver du
+- **macOS** med Xcode Command Line Tools (för `swiftc` och `git`), eller **Windows 10/11** med Git.
+- Node 22.18 eller nyare. Servern använder `node:sqlite` och kör TypeScript direkt.
+- Claude Code (`claude`), inloggat med en prenumeration.
+- `gh`, inloggat mot GitHub, eller `az` för Azure DevOps. Agenterna pushar och öppnar PR:er med dem.
+- Valfritt:
+  - en OpenAI-nyckel för porträtt och loggor
+  - App Store Connect-, Play- och Partner Center-nycklar för Releases
+  - Parallels för Windows-tester från en Mac
+
+### Installera för hand
+
+```
+git clone https://github.com/KaffaKaffa/kontrollrummet.git ~/Dev/kontrollrummet
+cd ~/Dev/kontrollrummet
 npm install
 ```
 
-1. **Projekten skapar du i appen** (**+** i toppraden), och de checkas aldrig in. Se [`teams/README.md`](teams/README.md).
-2. **Om du kör Claude Code med en annan profil än standard**, skapa `~/.control-room/env`. Profilen blir standardkontot (se Konton nedan):
+1. **Om du kör Claude Code med en annan profil än standard**, skapa `~/.control-room/env`. Profilen blir standardkontot (se Konton nedan):
    ```
    export CLAUDE_CONFIG_DIR="$HOME/.claude-annan-profil"
    export GH_CONFIG_DIR="$HOME/.claude-annan-profil/gh"
    ```
-   Agenterna, skrivborden och knappen "Öppna i terminal" ärver profilen. Använder du standardprofilen behövs ingen fil.
-3. **Prova:**
+   På Windows skrivs samma sak utan `export`: `NAMN=värde` per rad. Agenterna, skrivborden och knappen Terminal ärver profilen. Använder du standardprofilen behövs ingen fil. `CONTROL_ROOM_OWNER=<förnamn>` sätter vad agenterna kallar dig, om `gh` inte vet det.
+2. **Prova:**
    ```
    npm start            # bygger webben och startar på http://127.0.0.1:4317
    ```
-4. **Installera på riktigt**, så att servern startar vid inloggning och appen hamnar i Docken:
+3. **Installera på riktigt**, så att servern startar vid inloggning och appen finns:
    ```
-   OPENAI_API_KEY=sk-… npm run install:mac   # nyckeln är valfri och sparas i nyckelringen
+   OPENAI_API_KEY=sk-… npm run install:mac      # macOS; nyckeln är valfri och sparas i nyckelringen
    ```
-5. **Godkänn mappen:** öppna `claude` en gång i `desks/teamleader` och godkänn frågan om att lita på mappen. Annars startar inte skrivborden.
+   ```
+   $env:OPENAI_API_KEY = 'sk-…'                  # Windows (PowerShell); valfri, sparas krypterad (DPAPI)
+   npm run install:windows
+   ```
+4. **Skrivborden:** öppna `claude remote-control` en gång i `desks/teamleader`, `desks/architect` och `desks/gudfadern`, och svara ja på frågorna om att lita på mappen och slå på Remote Control. Avsluta med Ctrl+C. Skrivborden startar sedan av sig själva.
+5. **Första projektet** skapar du i appen med **+** i toppraden. Projekten checkas aldrig in, se [`teams/README.md`](teams/README.md).
 
-`npm run uninstall:mac` tar bort LaunchAgenten och appen. Data finns kvar i `~/.control-room`.
+**macOS:** `install:mac` bygger Kontrollrummet.app i `~/Applications` och en enda LaunchAgent, `se.kontrollrummet`: appens egen programfil i bakgrundsläge (`Kontrollrummet --supervise`) kör servern och skrivborden från `~/.control-room/services.json`. Under Inloggningsobjekt och Integritet och säkerhet heter den därför Kontrollrummet, inte node. `npm run uninstall:mac` tar bort det.
 
-På Macen är det en enda LaunchAgent, `se.kontrollrummet`: appens egen programfil i bakgrundsläge (`Kontrollrummet --supervise`) kör servern och skrivborden från `~/.control-room/services.json`. Under Inloggningsobjekt och Integritet och säkerhet heter den därför Kontrollrummet, inte node.
+**Windows:** `install:windows` bygger `Kontrollrummet.exe` med ikonen (med C#-kompilatorn som finns i Windows) i `%LOCALAPPDATA%\Kontrollrummet`, och lägger den i Autostart (`--supervise`: servern och skrivborden, en post "Kontrollrummet" i Aktivitetshanteraren), i Start-menyn och på skrivbordet. Där öppnar den tavlan i ett eget appfönster i Edge eller Chrome. Inloggningar öppnas i Windows Terminal, och tokens sparas krypterade i `~/.control-room/secrets`. `npm run uninstall:windows` tar bort det.
 
-#### Windows
-
-Samma sak på Windows 10/11, i PowerShell. Kräver Node 22 (`winget install OpenJS.NodeJS.LTS`), Git och Claude Code.
-
-```
-$env:OPENAI_API_KEY = 'sk-…'   # valfri; sparas krypterad för din användare (DPAPI)
-npm run install:windows
-```
-
-Det bygger `Kontrollrummet.exe` med ikonen (med C#-kompilatorn som finns i Windows) i `%LOCALAPPDATA%\Kontrollrummet`, lägger den i Autostart (`--supervise`: servern och skrivborden, en post "Kontrollrummet" i Aktivitetshanteraren) och i Start-menyn och på skrivbordet (öppnar tavlan i ett eget appfönster i Edge eller Chrome). Inloggningar öppnas i Windows Terminal, och tokens sparas krypterade i `~/.control-room/secrets`. Notiser: klicka på klockan uppe till höger och tillåt dem. `~/.control-room/env` fungerar som på Macen (`NAMN=värde` per rad). `npm run uninstall:windows` tar bort det igen.
+Data, loggar och inställningar finns kvar i `~/.control-room` efter en avinstallation.
 
 ---
 
@@ -86,18 +93,20 @@ Ett Claude-konto är en Claude Code-profil: en mapp med egen inloggning, prenume
 - Ett team väljer konto med `"account": "<id>"` i `team.local.json`. Utan det används standardkontot.
 - Agenterna, "Öppna i terminal" och `gh` körs som teamets konto. Har profilen en `gh`-mapp används den.
 - Varje konto är en egen prenumeration, så **gränsen för samtidiga agenter och kvotstoppet gäller per konto**. Topbaren visar fönstren för det konto som valt team eller samtal använder.
-- Ett konto som inte är inloggat loggas in från Gudfadern, som öppnar Terminal med `claude /login` och rätt profil.
+- Ett konto som inte är inloggat loggas in från Gudfadern eller projektets kontroller, som öppnar ett terminalfönster med `claude /login` och rätt profil. Är kontot utloggat när ett kort startar, stannar kortet på Behöver dig med en knapp för att logga in och fortsätta.
 
 ### Nytt projekt
 
 `+` bredvid teamen öppnar guiden. Den frågar efter det som behövs och fyller i förslag:
-1. **Repot:** en mapp på Macen, en URL att klona, eller ett nytt repo på GitHub eller i Azure DevOps. En mapp läses in direkt (`server/scan.ts`): git-värd och basbranch från origin, vilka appar som finns (webb, backend, iOS, Android, Mac, Windows, infra), och om det redan har `CLAUDE.md`, skills och `.mcp.json`. Ett repo som ska klonas eller skapas får förslag utifrån det du kryssar i att det ska innehålla.
+1. **Repot:** en mapp på datorn, en URL att klona, eller ett nytt repo på GitHub eller i Azure DevOps. En mapp läses in direkt (`server/scan.ts`): git-värd och basbranch från origin, vilka appar som finns (webb, backend, iOS, Android, Mac, Windows, infra), och om det redan har `CLAUDE.md`, skills och `.mcp.json`. Ett repo som ska klonas eller skapas får förslag utifrån det du kryssar i att det ska innehålla.
 2. **Namn och Claude-konto.**
 3. **Agenter** från mallarna i `library/roles/`, med föreslagna förkryssade och ägda mappar ifyllda. Ett litet repo får en utvecklare i stället för en per app.
 4. **Skills och instruktioner.** Det projektet redan har listas först, märkt *Finns* och ikryssat: instruktionsfiler som `CLAUDE.md` och `CLAUDE.local.md`, skills och kommandon (`.claude/commands`), i mappen och i varje repo. Instruktionsfilerna läses alltid av Claude Code. En skill eller ett kommando som kryssas ur stängs av för projektets agenter (`"disabledSkills"` i `team.json`, `Skill(<namn>)` i agenternas spärrlista). Nya skills från `library/skills/` är märkta *Ny* och läggs till *lokalt* (kopieras till `.claude/skills/` och hålls utanför git med `.git/info/exclude`) eller *checkas in* (läggs in i en PR). Här skrivs också teamets regler (`shared.md`).
 5. **MCP-servrar** enligt mallarna, till exempel Figma för designern och Playwright för testaren.
 6. **Logga:** ladda upp, eller beskriv den så ritas den med OpenAI.
 7. **Kontroller** (se nedan). För ett befintligt repo måste allt som krävs vara grönt.
+
+När projektet är skapat identifierar en agent själv var det körs, under Infrastruktur (se nedan).
 
 Ett första **onboarding-kort** låter teamet läsa in sig: det skriver `CLAUDE.md` om den saknas, checkar in valda skills och sparar anteckningar per roll, i en PR. Gudfadern och skrivborden kan göra samma sak med verktygen `scan_repo` och `create_project`.
 
@@ -110,16 +119,15 @@ Ett projekt kan vara en mapp med flera repon som hör ihop, som `~/Dev/Kund` med
 - **Skills som bara finns här** läggs i mappens `.claude/skills/` och länkas in i varje worktree, utanför git.
 - **`team.local.json`** får `"repos": { "Web": "Web", … }` (sökvägar relativt mappen) och `"baseBranches"`. Basbranchen föreslås per repo: `develop` när den finns (GitFlow), annars `origin/HEAD`. Den går att ändra i guiden.
 
-**Azure DevOps i en annan tenant.** `az` har en aktiv inloggning per profil. Är standardinloggningen i `~/.azure` ett annat konto än det som har tillgång till kundens DevOps, kan projektet få en egen profil: "Egen az-profil" under Projektet, eller `"azureConfigDir": "~/.azure-wurth"` i `team.local.json`. Logga in där från kontrollen "Skrivrätt". Agenterna, PR-bevakningen och kontrollerna använder sedan den profilen.
+**Azure DevOps i en annan tenant.** `az` har en aktiv inloggning per profil. Varje projekt bör ha en egen profil, så att en inloggning i ett projekt aldrig byter konto i ett annat: Inställningar → Git → Azure DevOps, eller `"azureConfigDir": "~/.azure-<projekt>"` i `team.local.json`. Agenterna, PR-bevakningen och kontrollerna använder sedan den profilen.
 
 ### Projektinställningar
 
-Fliken Inställningar på varje team:
-- **Projektet:** namn, basbranch, Claude-konto och logga (`teams/<id>/logo.png|svg|jpg|webp`).
-- **Kontroller:** Claude-kontot är inloggat, repot och `origin/<basbranch>` finns, `gh` eller `az` är inloggat med skrivrätt, verktygen stacken kräver finns, och agenternas MCP-servrar ansluter. Varje fel har en knapp: en Terminal öppnas med rätt kommando och konto (inloggningar, installationer, `/mcp` för OAuth-servrar), eller så rättas det direkt. "Kontrollera MCP" startar servrarna en gång och kostar ett kort Haiku-svar.
-- **Agenter:** lägg till från mallarna eller ta bort. En agent med kort som inte är klara kan inte tas bort, och borttagna hamnar i `roles/.removed/`. Nya agenter får mallens porträtt tills `scripts/avatars.mjs` gör ett eget.
-- **Skills:** repots skills (incheckade eller bara här), och bibliotekets att lägga till lokalt eller checka in.
-- **MCP-servrar:** vilka som finns och vilka agenter som använder dem.
+Fliken Inställningar på varje team har fyra flikar:
+- **Projektet:** namn, basbranch, Claude-konto och logga (`teams/<id>/logo.png|svg|jpg|webp`), människorna i projektet, agenterna (lägg till från mallarna eller ta bort; borttagna hamnar i `roles/.removed/`), skills och MCP-servrar.
+- **Git:** kontrollerna (Claude-kontot är inloggat, repot och `origin/<basbranch>` finns, `gh` eller `az` har skrivrätt, verktygen stacken kräver finns, agenternas MCP-servrar ansluter) och projektets egen az-profil för Azure DevOps. Varje fel har en knapp: ett terminalfönster öppnas med rätt kommando och konto, eller så rättas det direkt. "Kontrollera MCP" startar servrarna en gång och kostar ett kort Haiku-svar.
+- **Infrastruktur:** var projektet körs, som en lista: molnprojekt, konton, resurser, databaser. **Identifiera** låter en agent läsa infrastruktur som kod (bicep, terraform, `firebase.json`, wrangler, `eas.json`, CI), repot, projektets Claude-minne och vad de inloggade CLI:erna säger, och lägga till det som saknas. Skriver du i rutan gör den det du skriver i stället, till exempel "portalens resurser når vi med adm-kontot". Varje post visar sina uppgifter och om inloggningen fungerar, och har knappar för att logga in, redigera och ta bort. Agenterna får listan i sin prompt, med kontot och projektet uttryckligen (miljövariabler som `CLOUDSDK_CORE_PROJECT`, flaggor som `--subscription`), så att inget kommando hamnar på ett verktygs standardkonto. Saknar en agent något föreslår den det med `suggest_infra`, och du godkänner eller avvisar. Listan sparas i `team.local.json` (`"infraItems"`).
+- **Loggning:** de poster som är felkällor (Sentry, Application Insights, Google Cloud Logging), hur ofta de läses, och **Testa**.
 
 ### MCP per agent
 
@@ -146,19 +154,18 @@ Fliken Gudfadern är en Claude utan team, kort eller roll. Varje samtal har:
 - **Samma snålhet som korten:** sammanfattning vid 140k, kapade utskrifter, och bara kontrollrummets MCP om du inte väljer "Kontots alla".
 - **Skrivbordets verktyg:** Gudfadern kan lämna uppgifter till team, följa kort och svara på dem. Det auto-läget skulle fråga om visas i samtalet för godkännande.
 - **Ta i bruk:** mergar samtalets branch in i repot det kom från. För kontrollrummet startar servern sedan om, först när inga agenter arbetar, och bygger om webben.
-- **Ny session, Terminal, Bifoga och Arkivera.** Bifogade filer sparas i `~/.control-room/uploads/` och sökvägen skickas med meddelandet.
+- **Ny session, Terminal, Bifoga och Arkivera.** Bilder och filer klistras in, dras hit eller bifogas, som i korten. De sparas i `~/.control-room/uploads/`, och sökvägen skickas med meddelandet.
 
 Ett meddelande du skriver medan Gudfadern arbetar blir nästa tur. Samtal räknas in i kontots gräns, men köar aldrig, eftersom du själv har bett om dem.
 
 ### Team
 
-Ett team är en mapp under `teams/`:
+Ett team är en mapp under `teams/`. Projekten är din dators egna och checkas aldrig in; [`teams/team.local.example.json`](teams/team.local.example.json) visar formen på den lokala filen.
 
 ```
 teams/<id>/
   team.json                 delas i repot: appar, butiker, Figma-synk
-  team.local.json           bara din Mac: sökvägar, nycklar, VM:ar (gitignorerad)
-  team.local.example.json   hur den lokala filen ser ut
+  team.local.json           bara din dator: sökvägar, konto, infrastruktur, VM:ar
   shared.md                 regler som gäller teamets alla roller
   roles/*.md                en fil per agent
 ```
@@ -296,20 +303,13 @@ Windows-testbuilden skickar `desktop/` från `origin/<basbranch>` som `git archi
 
 ### Felkoll i prod
 
-Kontrollrummet kan läsa nya fel från Sentry (apparna) och Application Insights (backend) var 30:e minut. Allt som är nytt sedan förra kollen blir **ett** kort hos Bug-agenten, aldrig ett per fel. Själva kollen kostar inga tokens. En agent startar först när det finns något nytt. Första kollen kommer bara ihåg det som redan finns.
+Kontrollrummet läser nya fel från projektets felkällor, var 30:e minut om inget annat väljs under Loggning. Allt som är nytt sedan förra kollen blir **ett** kort hos Bug-agenten, aldrig ett per fel. Själva kollen kostar inga tokens. En agent startar först när det finns något nytt. Första kollen kommer bara ihåg det som redan finns.
 
-```json
-"monitors": {
-  "sentry": { "org": "<organisation>", "project": "<projekt>" },
-  "appInsights": { "appId": "<app id>", "subscription": "<prenumeration>", "name": "<resursnamn>" },
-  "everyMinutes": 30
-}
-```
+- **Sentry** läses med Sentrys CLI (`sentry`, inloggat).
+- **Application Insights** läses med en `az`-token för prenumerationen, i projektets az-profil. Kollen hämtar undantag per problem och serverfel (5xx) per anrop, för senaste dygnet.
+- **Google Cloud Logging** (Firebase Functions, Cloud Run) läses med `gcloud logging read` som projektets Google-konto.
 
-- **Sentry** läses med Sentrys CLI (`sentry`, inloggat, i `~/.local/bin`).
-- **Application Insights** läses med `az`-token för prenumerationen. Kollen hämtar undantag per problem och serverfel (5xx) per anrop, för senaste dygnet.
-
-Lägg inställningen i `team.local.json`, eftersom den gäller din dator och din inloggning.
+Felkällorna är poster under Infrastruktur med en `monitor`; Identifiera hittar dem oftast själv.
 
 ### Prata med ett annat kontrollrum
 
@@ -332,10 +332,16 @@ Båda måste ha varandras etiketter i `peers`, och båda behöver skrivrätt i r
 - **Länkar till GitHub-PR:er och issues** visas som "PR #123".
 - **Andra länkar** är vanliga länkar.
 
-Figma-brickan visar filens och ramens riktiga namn om servern har en personlig token från Figma. Skapa den under Figma › Settings › Security › Personal access tokens, med läsrätt till filinnehåll. Kopiera den och lägg den i nyckelringen:
+Figma-brickan visar filens och ramens riktiga namn om servern har en personlig token från Figma. Skapa den under Figma › Settings › Security › Personal access tokens, med läsrätt till filinnehåll, och spara den som `control-room-figma`. På macOS i nyckelringen:
 
 ```sh
 security add-generic-password -s control-room-figma -a figma -w "$(pbpaste)"
+```
+
+På Windows (PowerShell), krypterad för din användare:
+
+```powershell
+. .\scripts\windows-common.ps1; Save-ControlRoomSecret control-room-figma (Get-Clipboard)
 ```
 
 Utan token visas namnet ur länken. Servern kommer ihåg varje namn, så varje länk kostar ett enda anrop.
@@ -371,15 +377,16 @@ Testaren och utvecklarna kan be om att få starta VM:en med `start_vm`. Frågan 
 ## Säkerhet
 - Servern binder bara till `127.0.0.1` och nekar andra `Host`, mot DNS-rebinding.
 - POST, PUT och WebSocketen kräver rätt `Origin`, så en annan webbsida kan inte styra agenterna.
-- **Spärrlistan:** agenterna är spärrade från releaseskript, deployskript, `gh workflow run`, Azure-deploy och `gh pr merge`. Listan matchar mönster och är inte vattentät, eftersom agenterna kör på din Mac med dina nycklar. Den andra spärren är auto-lägets egen bedömning.
+- **Spärrlistan:** agenterna är spärrade från releaseskript, deployskript, `gh workflow run`, Azure-deploy och `gh pr merge`. Listan matchar mönster och är inte vattentät, eftersom agenterna kör på din dator med dina nycklar. Den andra spärren är auto-lägets egen bedömning.
 - Agenterna pushar och öppnar PR:er i ditt namn via `gh`.
-- **Nycklar:** OpenAI-nyckeln ligger i nyckelringen (`control-room-openai`). Store-nycklarna ligger där `team.local.json` pekar. Inget av det finns i repot.
+- **Nycklar:** OpenAI-nyckeln och tokens (Cloudflare, Expo, Figma) ligger i nyckelringen på macOS och krypterade för din användare (DPAPI) i `~/.control-room/secrets` på Windows. Store-nycklarna ligger där `team.local.json` pekar. Inget av det finns i repot.
+- **Infrastrukturlistan:** det en agent eller sidan skickar kontrolleras på servern. Kontroller som körs av sig själva får bara läsa (list, show, whoami), inloggningar körs bara i ett synligt terminalfönster när du klickar, och variabler som `PATH` eller `CLAUDE_*` kan inte sättas.
 
 ## Felsökning
 - **Loggar** finns i `~/.control-room/logs/` (`server.log`, `desk-*.log`).
 - **"Workspace not trusted" i en desk-logg:** öppna `claude`, med samma profil som i `~/.control-room/env`, i `desks/teamleader` och godkänn.
 - **Ett kort som står still:** öppna det och skriv till agenten, eller tryck **Terminal** för att ta över med `claude --resume` i dess worktree.
-- **Starta om allt:** menyn i Kontrollrummet.app, eller `launchctl kickstart -k gui/$(id -u)/se.kontrollrummet.server`.
+- **Starta om servern:** ↻ i toppraden, menyn i Kontrollrummet.app, eller `launchctl kill SIGUSR1 gui/$(id -u)/se.kontrollrummet` på macOS. **Starta om allt:** `launchctl kickstart -k gui/$(id -u)/se.kontrollrummet` på macOS, och `Kontrollrummet.exe --stop` följt av Kontrollrummet i Start-menyn på Windows.
 
 ## Utveckla kontrollrummet
 
@@ -391,5 +398,6 @@ npm run typecheck
 - `server/`: Node, HTTP, WebSocket och MCP, utan ramverk.
 - `web/`: Vite och React.
 - `mac/`: Swift-appen, byggd med `mac/build.sh`.
+- `windows/`: `Kontrollrummet.cs` och ikonen; byggs av `scripts/install-windows.ps1`.
 - `scripts/`: start, installation, porträtt och 3D-gubbar.
 - `web/src/office3d/`: Kontoret i 3D (scen, planlösning, beteenden, gubbar och möbler).
