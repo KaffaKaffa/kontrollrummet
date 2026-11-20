@@ -45,11 +45,23 @@ export interface Subtask {
   summary: string | null;
   /** What the agent asks the owner when it stops on needs-you: a question, choices, what it would need to go on alone. */
   ask: Ask | null;
+  /** Where the card's open PR stands with its reviewers, from the PR round. */
+  review: PrReview | null;
   costUsd: number;
   /** Tokens the agent read on its latest call: how big the conversation has grown. */
   contextTokens: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * waiting: someone is asked to review (or a review is required) and has not;
+ * changes: a reviewer wants changes; approved: approved; none: nobody asked.
+ */
+export interface PrReview {
+  state: 'waiting' | 'changes' | 'approved' | 'none';
+  /** Who it waits for, wants changes or approved: people's names where the project knows them. */
+  who: string[];
 }
 
 export interface Ask {
@@ -83,6 +95,8 @@ export interface Notice {
   subtaskId: number | null;
   text: string;
   at: string;
+  /** The owner has dealt with it ("Klart") or put it away ("Stäng"): out of the inbox. */
+  closedAt: string | null;
 }
 
 export type PlanStatus = 'draft' | 'ready' | 'parked' | 'implementing' | 'done' | 'discarded';
@@ -180,6 +194,8 @@ for (const [table, column, type] of [
   ['subtasks', 'ask', 'TEXT'],
   ['subtasks', 'context_tokens', 'INTEGER NOT NULL DEFAULT 0'],
   ['subtasks', 'repo', 'TEXT'],
+  ['subtasks', 'review', 'TEXT'],
+  ['notices', 'closed_at', 'TEXT'],
 ] as const) {
   const has = (db.prepare(`PRAGMA table_info(${table})`).all() as Row[]).some((c) => c.name === column);
   if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
@@ -213,6 +229,7 @@ const toSubtask = (r: Row): Subtask => ({
   prUrl: (r.pr_url as string | null) ?? null,
   summary: (r.summary as string | null) ?? null,
   ask: r.ask ? (JSON.parse(String(r.ask)) as Ask) : null,
+  review: r.review ? (JSON.parse(String(r.review)) as PrReview) : null,
   costUsd: Number(r.cost_usd),
   contextTokens: Number(r.context_tokens ?? 0),
   createdAt: String(r.created_at),
@@ -231,6 +248,13 @@ export function createTask(team: string, title: string, text: string): Task {
   const r = db
     .prepare('INSERT INTO tasks (team, title, text) VALUES (?, ?, ?) RETURNING *')
     .get(team, title, text) as Row;
+  return toTask(r);
+}
+
+/** A better title once more is known: the ticket's own, with its number. */
+export function setTaskTitle(id: number, title: string): Task {
+  const r = db.prepare('UPDATE tasks SET title = ? WHERE id = ? RETURNING *').get(title, id) as Row | undefined;
+  if (!r) throw new Error('uppgiften finns inte');
   return toTask(r);
 }
 
@@ -280,6 +304,7 @@ const COLUMNS = {
   agent: 'agent',
   dependsOn: 'depends_on',
   ask: 'ask',
+  review: 'review',
 } as const;
 
 export type SubtaskPatch = Partial<Pick<Subtask, keyof typeof COLUMNS>>;
@@ -289,7 +314,7 @@ export function updateSubtask(id: number, patch: SubtaskPatch): Subtask {
   if (keys.length > 0) {
     const sets = keys.map((k) => `${COLUMNS[k]} = ?`).join(', ');
     const values = keys.map((k) =>
-      k === 'dependsOn' ? JSON.stringify(patch[k] ?? []) : k === 'ask' ? (patch.ask ? JSON.stringify(patch.ask) : null) : (patch[k] ?? null),
+      k === 'dependsOn' ? JSON.stringify(patch[k] ?? []) : k === 'ask' || k === 'review' ? (patch[k] ? JSON.stringify(patch[k]) : null) : (patch[k] ?? null),
     );
     db.prepare(
       `UPDATE subtasks SET ${sets}, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ') WHERE id = ?`,
@@ -319,7 +344,13 @@ const toNotice = (r: Row): Notice => ({
   subtaskId: r.subtask_id == null ? null : Number(r.subtask_id),
   text: String(r.text),
   at: String(r.at),
+  closedAt: (r.closed_at as string | null) ?? null,
 });
+
+export function closeNotice(id: number): Notice | undefined {
+  const r = db.prepare("UPDATE notices SET closed_at = strftime('%Y-%m-%dT%H:%M:%fZ') WHERE id = ? RETURNING *").get(id) as Row | undefined;
+  return r && toNotice(r);
+}
 
 export function addNotice(team: string, subtaskId: number | null, text: string): Notice {
   return toNotice(
@@ -328,7 +359,8 @@ export function addNotice(team: string, subtaskId: number | null, text: string):
 }
 
 export function listNotices(limit = 50): Notice[] {
-  return (db.prepare('SELECT * FROM notices ORDER BY id DESC LIMIT ?').all(limit) as Row[]).map(toNotice);
+  // Open ones whatever their age, and the latest few closed (the watches look at what was told).
+  return (db.prepare('SELECT * FROM notices WHERE closed_at IS NULL OR id > (SELECT MAX(id) FROM notices) - ? ORDER BY id DESC').all(limit) as Row[]).map(toNotice);
 }
 
 const toPlan = (r: Row): Plan => ({

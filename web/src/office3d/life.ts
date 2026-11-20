@@ -56,6 +56,11 @@ export function useOfficeLife(team: string, roles: Role[], subtasks: Subtask[], 
   // The cards decide each agent's duty; a new card from the lead sends it over to hand it out.
   const seen = useRef<Set<number> | null>(null);
   useEffect(() => {
+    // A role edited in place (its name, character) keeps its office.
+    for (const r of roles) {
+      const a = director.agents.get(r.id);
+      if (a) a.role = r;
+    }
     const duties = new Map(roles.map((r) => [r.id, dutyOf(r, subtasks, tasks, approvals)]));
     director.setDuties(duties);
     const ids = new Set(subtasks.map((s) => s.id));
@@ -82,7 +87,10 @@ export function useLifeTick(ms = 1000) {
 }
 
 const names = (d: Director, ids: string[]) => {
-  const list = ids.map((id) => d.agents.get(id)?.role.name ?? id);
+  const list = ids.map((id) => {
+    const r = d.agents.get(id)?.role;
+    return r ? r.nick || r.name : id;
+  });
   return list.length <= 1 ? (list[0] ?? '') : `${list.slice(0, -1).join(', ')} och ${list[list.length - 1]}`;
 };
 
@@ -185,5 +193,5 @@ export function doing(d: Director, id: string): string | null {
 function visited(d: Director, a: Agent): string {
   const id = a.holds?.startsWith('visit-') ? a.holds.slice(6) : '';
   const b = d.agents.get(id);
-  return b ? `${b.role.name}s skrivbord` : 'en kollegas skrivbord';
+  return b ? `${b.role.nick || b.role.name}s skrivbord` : 'en kollegas skrivbord';
 }

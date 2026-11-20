@@ -40,7 +40,7 @@ Claude kontrollerar och installerar det som saknas, installerar Kontrollrummet m
 - Claude Code (`claude`), inloggat med en prenumeration.
 - `gh`, inloggat mot GitHub, eller `az` för Azure DevOps. Agenterna pushar och öppnar PR:er med dem.
 - Valfritt:
-  - en OpenAI-nyckel för porträtt och loggor
+  - API-nycklar till OpenAI (porträtt, loggor, konsulter) och Google Gemini (konsulter). Läggs in under Inställningar → Konsulter → API-nycklar: knappen öppnar sidan där nyckeln skapas och ett terminalfönster där du klistrar in den
   - App Store Connect-, Play- och Partner Center-nycklar för Releases
   - Parallels för Windows-tester från en Mac
 
@@ -379,7 +379,7 @@ Testaren och utvecklarna kan be om att få starta VM:en med `start_vm`. Frågan 
 - POST, PUT och WebSocketen kräver rätt `Origin`, så en annan webbsida kan inte styra agenterna.
 - **Spärrlistan:** agenterna är spärrade från releaseskript, deployskript, `gh workflow run`, Azure-deploy och `gh pr merge`. Listan matchar mönster och är inte vattentät, eftersom agenterna kör på din dator med dina nycklar. Den andra spärren är auto-lägets egen bedömning.
 - Agenterna pushar och öppnar PR:er i ditt namn via `gh`.
-- **Nycklar:** OpenAI-nyckeln och tokens (Cloudflare, Expo, Figma) ligger i nyckelringen på macOS och krypterade för din användare (DPAPI) i `~/.control-room/secrets` på Windows. Store-nycklarna ligger där `team.local.json` pekar. Inget av det finns i repot.
+- **Nycklar:** OpenAI- och Gemini-nycklarna (`control-room-openai`, `control-room-gemini`) och tokens (Cloudflare, Expo, Figma) ligger i nyckelringen på macOS och krypterade för din användare (DPAPI) i `~/.control-room/secrets` på Windows. Store-nycklarna ligger där `team.local.json` pekar. Inget av det finns i repot.
 - **Infrastrukturlistan:** det en agent eller sidan skickar kontrolleras på servern. Kontroller som körs av sig själva får bara läsa (list, show, whoami), inloggningar körs bara i ett synligt terminalfönster när du klickar, och variabler som `PATH` eller `CLAUDE_*` kan inte sättas.
 
 ## Felsökning

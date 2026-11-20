@@ -5,7 +5,7 @@ import { APP_ROOT, TEAMS_DIR } from './config.ts';
 import { getAccount } from './accounts.ts';
 import { listSubtasks } from './db.ts';
 import { generateImage } from './images.ts';
-import { cleanPeople, getTeam, parseRole, type InfraConfig, type InfraItem, type MonitorConfig, type Role } from './roles.ts';
+import { cleanPeople, getTeam, parseRole, type DevApp, type InfraConfig, type InfraItem, type MonitorConfig, type Role } from './roles.ts';
 
 /**
  * What a project is set up from: role templates and skills in library/, and
@@ -260,6 +260,8 @@ export function saveTeamSettings(
   teamId: string,
   input: {
     name?: string;
+    /** #rrggbb; empty: one made from the id. */
+    color?: string;
     baseBranch?: string;
     account?: string;
     azureConfigDir?: string | null;
@@ -271,6 +273,8 @@ export function saveTeamSettings(
     monitorEveryMinutes?: number;
     disabledSkills?: string[];
     people?: unknown;
+    /** The local development environments, already checked (roles.ts cleanDevApps). */
+    devApps?: DevApp[];
   },
 ) {
   const dir = join(TEAMS_DIR, teamId);
@@ -278,6 +282,10 @@ export function saveTeamSettings(
   const shared = readJsonFile(join(dir, 'team.json'));
   const local = readJsonFile(join(dir, 'team.local.json'));
   if (typeof input.name === 'string' && input.name.trim()) shared.name = input.name.trim();
+  if (typeof input.color === 'string') {
+    if (/^#[0-9a-f]{6}$/i.test(input.color)) shared.color = input.color.toLowerCase();
+    else delete shared.color;
+  }
   if (typeof input.baseBranch === 'string' && /^[\w./-]+$/.test(input.baseBranch.trim())) shared.baseBranch = input.baseBranch.trim();
   if (typeof input.account === 'string') {
     const account = getAccount(input.account);
@@ -332,6 +340,11 @@ export function saveTeamSettings(
     else delete monitors.everyMinutes;
     if (Object.keys(monitors).length) local.monitors = monitors;
     else delete local.monitors;
+  }
+  // How the apps start is this Mac's: paths, ports, scripts in run/.
+  if (input.devApps !== undefined) {
+    if (input.devApps.length) local.devApps = input.devApps;
+    else delete local.devApps;
   }
   writeJsonFile(join(dir, 'team.json'), shared);
   writeJsonFile(join(dir, 'team.local.json'), local);

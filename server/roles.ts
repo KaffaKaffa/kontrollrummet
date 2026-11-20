@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { execFileSync } from './proc.ts';
 import { basename, isAbsolute, join } from 'node:path';
 import { APP_ROOT, TEAMS_DIR, expandHome } from './config.ts';
@@ -21,7 +21,15 @@ export interface Role {
   look: string;
   /** The 3D character it is drawn as, from library/characters; empty: the template with the role's id. */
   character: string;
+  /** When its portrait in web/public/avatars last changed (ms), if it has one. */
+  portraitAt?: number;
+  /** The role, e.g. "Backend". */
   name: string;
+  /**
+   * What the agent is called, e.g. "Sigge": known to the whole team, and
+   * accepted wherever a tool names an agent. Empty: it goes by its role.
+   */
+  nick: string;
   /** What the agent is for, one line, shown on its section. */
   title: string;
   model: string;
@@ -179,9 +187,82 @@ export function peopleSection(team: Team): string {
   return `## Människorna i projektet\n\n${lines.join('\n')}\n\nFrågor och beslut går till den som det gäller.`;
 }
 
+export interface TeamResource {
+  label: string;
+  ports: number[];
+}
+
+/**
+ * A local development environment the control room runs: a backend, a dev
+ * server, the app as its people start it. The owner starts and stops it from
+ * a button; agents that need it use it through use_app instead of starting
+ * their own, so the same server is never started twice. team.local.json
+ * "devApps", made by Inställningar → Appar → Identifiera.
+ */
+export interface DevApp {
+  id: string;
+  /** What the button says, e.g. "Portal Internal". */
+  label: string;
+  /** The repo it runs from, by id. */
+  repo: string;
+  /** Folder inside the repo the command runs in; empty: the repo's root. */
+  dir: string;
+  /**
+   * Runs in the foreground with zsh until stopped. Gets CR_ROOT (the checkout
+   * it runs from), CR_CARD (the card's number, empty for the owner's) and
+   * CR_RUN (the project's run/ folder, for a script there).
+   */
+  command: string;
+  /** Where it is opened, e.g. https://localhost:2222. */
+  url: string;
+  /** Ports it listens on; it is up when all answer. */
+  ports: number[];
+  /** For the agents: how to log in, test users, what to know. */
+  notes: string;
+  /** Agents never stop it when they are done; it is left running for the owner. */
+  keepRunning: boolean;
+}
+
+export function cleanDevApps(raw: unknown): DevApp[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: DevApp[] = [];
+  for (const x of raw as Record<string, unknown>[]) {
+    if (!x || typeof x !== 'object') continue;
+    const str = (k: string) => (typeof x[k] === 'string' ? (x[k] as string).trim() : '');
+    const label = str('label');
+    const command = str('command');
+    if (!label || !command) continue;
+    let id = (str('id') || label).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'app';
+    while (seen.has(id)) id += '-2';
+    seen.add(id);
+    const ports = (Array.isArray(x.ports) ? x.ports : String(x.ports ?? '').split(/[\s,]+/))
+      .map(Number)
+      .filter((n) => Number.isInteger(n) && n > 0 && n < 65536);
+    out.push({ id, label, repo: str('repo'), dir: str('dir').replace(/^\.?\/+|\/+$/g, ''), command, url: str('url'), ports: [...new Set(ports)], notes: str('notes'), keepRunning: x.keepRunning === true });
+  }
+  return out;
+}
+
 export interface Team {
   id: string;
+  /** Local development environments the control room starts and stops; see DevApp. */
+  devApps: DevApp[];
   name: string;
+  /** #rrggbb, team.json "color"; made from the id when not set. */
+  color: string;
+  /**
+   * Things in this project only one card can use at a time, besides the
+   * simulators and VMs: a backend on a fixed port the login only accepts,
+   * say. team.json "resources": { "<id>": { "label": "…", "ports": [2222] } }.
+   * Taken with acquire_resource; the next in line gets the ports freed.
+   */
+  resources: Record<string, TeamResource>;
+  /**
+   * Scripts that start the app the way its people do, in teams/<id>/run/:
+   * the path and the comment at the top of each, for the agents' prompt.
+   */
+  runScripts: { path: string; about: string }[];
   /**
    * The project's folder: one checkout, or a folder holding several that go
    * together. Agents without a worktree (lead, architect, bug) work here.
@@ -260,6 +341,7 @@ export function parseRole(id: string, source: string): Role {
     vibe: meta.get('vibe') ?? '',
     look: meta.get('look') ?? '',
     character: meta.get('character') ?? '',
+    nick: meta.get('nick') ?? '',
     title: meta.get('title') ?? '',
     model: meta.get('model') ?? 'opus',
     wakeModel: meta.get('wakeModel') ?? '',
@@ -293,6 +375,9 @@ function loadTeam(id: string): Team {
     existsSync(local) ? JSON.parse(readFileSync(local, 'utf8')) : {},
   ) as {
     name?: string;
+    color?: string;
+    resources?: Record<string, { label?: string; ports?: number[] }>;
+    devApps?: unknown;
     repo: string;
     /** Several checkouts under repo: { "<id>": "<path, relative to repo or absolute>" }. */
     repos?: Record<string, string>;
@@ -321,7 +406,12 @@ function loadTeam(id: string): Team {
     ? readdirSync(rolesDir)
         .filter((f) => f.endsWith('.md'))
         .sort()
-        .map((f) => parseRole(f.slice(0, -3), readFileSync(join(rolesDir, f), 'utf8')))
+        .map((f) => {
+          const role = parseRole(f.slice(0, -3), readFileSync(join(rolesDir, f), 'utf8'));
+          // When the portrait last changed: the page asks for it anew after a new character or face.
+          const portrait = join(APP_ROOT, 'web/public/avatars', `${id}-${role.id}.png`);
+          return existsSync(portrait) ? { ...role, portraitAt: Math.round(statSync(portrait).mtimeMs) } : role;
+        })
     : [];
   const root = expandHome(config.repo);
   const baseBranch = config.baseBranch ?? 'main';
@@ -335,6 +425,14 @@ function loadTeam(id: string): Team {
   return {
     id,
     name: config.name ?? id,
+    color: teamColor(id, config.color),
+    resources: Object.fromEntries(
+      Object.entries(config.resources ?? {})
+        .filter(([rid]) => /^[\w-]+$/.test(rid))
+        .map(([rid, x]) => [rid, { label: x.label ?? rid, ports: (x.ports ?? []).filter((n) => Number.isInteger(n)) }]),
+    ),
+    runScripts: runScripts(dir),
+    devApps: cleanDevApps(config.devApps).map((a) => ({ ...a, repo: repos.some((r) => r.id === a.repo) ? a.repo : repos[0].id })),
     repo: root,
     repos,
     account: getAccount(config.account).id,
@@ -358,6 +456,25 @@ function loadTeam(id: string): Team {
     prompt: [read(join(APP_ROOT, 'shared.md')), read(join(dir, 'shared.md'))].filter(Boolean).join('\n\n'),
     teamPrompt: read(join(dir, 'shared.md')),
   };
+}
+
+/** teams/<id>/run/*: each script and the comment block at its top. */
+function runScripts(dir: string): { path: string; about: string }[] {
+  const run = join(dir, 'run');
+  if (!existsSync(run)) return [];
+  return readdirSync(run)
+    .filter((f) => !f.startsWith('.'))
+    .sort()
+    .map((f) => {
+      const lines = readFileSync(join(run, f), 'utf8').split('\n');
+      const about = lines
+        .slice(lines[0]?.startsWith('#!') ? 1 : 0)
+        .filter((_, i, all) => all.slice(0, i + 1).every((l) => l.startsWith('#')))
+        .map((l) => l.replace(/^#\s?/, ''))
+        .join('\n')
+        .trim();
+      return { path: join(run, f), about };
+    });
 }
 
 /** origin/HEAD of a checkout, looked up once per path. */
@@ -418,9 +535,16 @@ export function saveRole(teamId: string, roleId: string, input: Partial<Role>): 
   if (!KINDS.includes(next.kind)) throw new Error(`okänd kind ${next.kind}`);
   if (!PERMISSIONS.includes(next.permission)) throw new Error(`okänd permission ${next.permission}`);
   const clean = (v: string) => v.replace(/[\r\n]+/g, ' ').trim();
+  next.nick = clean(next.nick ?? '').replace(/[,:()]/g, '').slice(0, 30);
+  if (next.nick) {
+    const taken = team.roles.find((r) => r.id !== roleId && [r.id, r.name, r.nick].some((x) => x && x.toLowerCase() === next.nick.toLowerCase()));
+    if (taken) throw new Error(`${next.nick} används redan av ${who(taken)} i teamet`);
+  }
+  if (next.character && !/^[\w-]+$/.test(next.character)) throw new Error('ogiltig gubbe');
   if (!clean(next.name) || !clean(next.model)) throw new Error('namn och modell krävs');
   const lines = [
     `name: ${clean(next.name)}`,
+    next.nick ? `nick: ${clean(next.nick)}` : '',
     `kind: ${next.kind}`,
     next.vibe ? `vibe: ${clean(next.vibe)}` : '',
     next.look ? `look: ${clean(next.look)}` : '',
@@ -437,7 +561,71 @@ export function saveRole(teamId: string, roleId: string, input: Partial<Role>): 
     next.permission !== 'auto' ? `permission: ${next.permission}` : '',
   ].filter(Boolean);
   writeFileSync(join(TEAMS_DIR, teamId, 'roles', `${roleId}.md`), `---\n${lines.join('\n')}\n---\n${next.prompt.trim()}\n`);
+  if (next.character !== current.character) swapPortrait(teamId, roleId, current.character, next.character);
   return getTeam(teamId)!.roles.find((r) => r.id === roleId)!;
+}
+
+/**
+ * The office portrait follows the chosen character. A role's own portrait
+ * (made from its `look:`) is put aside the first time, and comes back when
+ * the role goes back to its default.
+ */
+function swapPortrait(teamId: string, roleId: string, from: string, to: string) {
+  const dir = join(APP_ROOT, 'web/public/avatars');
+  const file = join(dir, `${teamId}-${roleId}.png`);
+  const own = join(dir, `${teamId}-${roleId}.own.png`);
+  const lib = (id: string) => join(APP_ROOT, 'library/avatars', `${id}.png`);
+  mkdirSync(dir, { recursive: true });
+  if (!from && existsSync(file) && !existsSync(own) && !existsSync(lib(roleId))) renameSync(file, own);
+  const source = to ? lib(to) : existsSync(own) ? own : lib(roleId);
+  if (existsSync(source)) copyFileSync(source, file);
+}
+
+/** How an agent is named to the others: "Sigge (Backend)", or just "Backend". */
+export function who(role: Pick<Role, 'name' | 'nick'>): string {
+  return role.nick ? `${role.nick} (${role.name})` : role.name;
+}
+
+/** A team's roles for naming cards in a list; read at most every few seconds, not once per card. */
+const rolesSeen = new Map<string, { at: number; roles: Role[] }>();
+function rolesOf(teamId: string): Role[] {
+  const hit = rolesSeen.get(teamId);
+  if (hit && Date.now() - hit.at < 5000) return hit.roles;
+  const roles = getTeam(teamId)?.roles ?? [];
+  rolesSeen.set(teamId, { at: Date.now(), roles });
+  return roles;
+}
+
+/** The agent on a card, by the team and role id the card holds: who(), or the id when the role is gone. */
+export function whoIn(teamId: string, roleId: string): string {
+  const role = rolesOf(teamId).find((r) => r.id === roleId);
+  return role ? who(role) : roleId;
+}
+
+/** What the owner calls the agent: its own name, or its role. */
+export function nameIn(teamId: string, roleId: string): string {
+  const role = rolesOf(teamId).find((r) => r.id === roleId);
+  return role ? role.nick || role.name : roleId;
+}
+
+/** An agent named by a tool: its id, its name or its role, in any case. */
+export function findRole(team: Team, ref: unknown): Role | undefined {
+  const want = String(ref ?? '').trim().toLowerCase();
+  if (!want) return undefined;
+  return team.roles.find((r) => r.id === want) ?? team.roles.find((r) => r.nick.toLowerCase() === want) ?? team.roles.find((r) => r.name.toLowerCase() === want);
+}
+
+/** A team's colour when team.json has none: steady per id, spread round the hue circle. */
+export function teamColor(id: string, configured?: string): string {
+  if (configured && /^#[0-9a-f]{6}$/i.test(configured)) return configured;
+  let h = 0;
+  for (const c of id) h = (h * 31 + c.charCodeAt(0)) % 360;
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const v = 0.5 - 0.42 * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(v * 255).toString(16).padStart(2, '0');
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
 }
 
 export function saveTeamPrompt(teamId: string, text: string) {

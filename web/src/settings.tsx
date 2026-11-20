@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { type Role, type RoleKind, type Team } from './api.ts';
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
+import { avatarUrl, nameOf, type Role, type RoleKind, type Team } from './api.ts';
+import { defaultCharacter, portraitUrl, useWardrobe } from './office3d/characters.ts';
 import { Avatar } from './ui.tsx';
+
+/** The 3D character up close: three.js only loads when the appearance tab is open. */
+const Preview = lazy(() => import('./office3d/Preview.tsx'));
 
 /** A dialog that closes on Escape and on the backdrop, and keeps focus inside while open. */
 export function Modal({
@@ -18,11 +22,15 @@ export function Modal({
   drawer?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Callers pass a new onClose every render (a card drawer re-renders on each line an agent writes);
+  // focus must move only when the dialog opens, not on every render.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     ref.current?.querySelector<HTMLElement>('input, textarea, select, button')?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') closeRef.current();
       if (e.key !== 'Tab' || !ref.current) return;
       const focusable = [...ref.current.querySelectorAll<HTMLElement>('a, button, input, textarea, select')].filter((el) => !el.hasAttribute('disabled'));
       const first = focusable[0];
@@ -40,9 +48,9 @@ export function Modal({
       document.removeEventListener('keydown', onKey);
       previous?.focus();
     };
-  }, [onClose]);
+  }, []);
   return (
-    <div className={`scrim ${drawer ? 'scrim-drawer' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className={`scrim ${drawer ? 'scrim-drawer' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && closeRef.current()}>
       <div className={drawer ? 'drawer' : `modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={label} ref={ref}>
         {children}
       </div>
@@ -137,7 +145,7 @@ async function put(path: string, body: unknown) {
 
 /** Everything about one agent, editable. Saved straight to its file in teams/<team>/roles/. */
 export function AgentSettings({ team, role, onClose }: { team: Team; role: Role; onClose: () => void }) {
-  const [tab, setTab] = useState<'agent' | 'notes' | 'team'>('agent');
+  const [tab, setTab] = useState<'agent' | 'looks' | 'notes' | 'team'>('agent');
   // What the role has learned: loaded when the tab opens.
   const [notes, setNotes] = useState<string | null>(null);
   useEffect(() => {
@@ -159,7 +167,7 @@ export function AgentSettings({ team, role, onClose }: { team: Team; role: Role;
   const save = async () => {
     setState({ busy: true, error: null, saved: false });
     try {
-      if (tab === 'agent') {
+      if (tab === 'agent' || tab === 'looks') {
         await put(`/api/teams/${team.id}/roles/${role.id}`, {
           ...draft,
           owns: draft.owns
@@ -183,13 +191,13 @@ export function AgentSettings({ team, role, onClose }: { team: Team; role: Role;
   };
 
   return (
-    <Modal label={`Inställningar för ${role.name}`} onClose={onClose} wide>
+    <Modal label={`Inställningar för ${nameOf(role)}`} onClose={onClose} wide>
       <header className="modal-head">
         <Avatar team={team.id} role={role} size="xl" />
         <div>
           <p className="eyebrow">teams/{team.id}/roles/{role.id}.md</p>
-          <h2>{role.name}</h2>
-          <p className="desk-title">{role.title}</p>
+          <h2>{nameOf(role)}</h2>
+          <p className="desk-title">{role.nick ? `${role.name} · ${role.title}` : role.title}</p>
         </div>
         <button type="button" className="btn btn-quiet modal-close" onClick={onClose} aria-label="Stäng">
           Stäng
@@ -197,7 +205,10 @@ export function AgentSettings({ team, role, onClose }: { team: Team; role: Role;
       </header>
       <div className="segmented" role="tablist" aria-label="Inställningar">
         <button type="button" role="tab" aria-selected={tab === 'agent'} onClick={() => setTab('agent')}>
-          {role.name}
+          {nameOf(role)}
+        </button>
+        <button type="button" role="tab" aria-selected={tab === 'looks'} onClick={() => setTab('looks')}>
+          Utseende
         </button>
         <button type="button" role="tab" aria-selected={tab === 'notes'} onClick={() => setTab('notes')}>
           Lärdomar
@@ -212,8 +223,19 @@ export function AgentSettings({ team, role, onClose }: { team: Team; role: Role;
           <div className="form-row">
             <label className="field">
               <span>Namn</span>
+              <input value={draft.nick} onChange={(e) => set('nick', e.target.value)} placeholder={draft.name} maxLength={30} />
+              <small>Vad agenten heter. Hela teamet får veta det och kan nämna agenten vid namn. Tomt: rollen.</small>
+            </label>
+            <label className="field">
+              <span>Roll</span>
               <input value={draft.name} onChange={(e) => set('name', e.target.value)} />
             </label>
+          </div>
+          <label className="field">
+            <span>Uppdrag (en rad)</span>
+            <input value={draft.title} onChange={(e) => set('title', e.target.value)} />
+          </label>
+          <div className="form-row">
             <label className="field">
               <span>Typ</span>
               <select value={draft.kind} onChange={(e) => set('kind', e.target.value as RoleKind)}>
@@ -225,10 +247,6 @@ export function AgentSettings({ team, role, onClose }: { team: Team; role: Role;
               </select>
             </label>
           </div>
-          <label className="field">
-            <span>Uppdrag (en rad)</span>
-            <input value={draft.title} onChange={(e) => set('title', e.target.value)} />
-          </label>
           <div className="form-row">
             <label className="field">
               <span>Modell</span>
@@ -279,10 +297,20 @@ export function AgentSettings({ team, role, onClose }: { team: Team; role: Role;
             <small>Läggs till efter de gemensamma reglerna och teamets regler. Gäller från agentens nästa tur.</small>
           </label>
         </div>
+      ) : tab === 'looks' ? (
+        <Looks
+          team={team}
+          role={role}
+          character={draft.character ?? ''}
+          onChange={(p) => {
+            setDraft((d) => ({ ...d, ...p }));
+            setState((st) => ({ ...st, saved: false }));
+          }}
+        />
       ) : tab === 'notes' ? (
         <div className="form">
           <label className="field">
-            <span>Det {role.name} har lärt sig i {team.name} (teams/{team.id}/notes/{role.id}.md)</span>
+            <span>Det {nameOf(role)} har lärt sig i {team.name} (teams/{team.id}/notes/{role.id}.md)</span>
             <textarea
               className="prompt"
               value={notes ?? ''}
@@ -325,5 +353,56 @@ export function AgentSettings({ team, role, onClose }: { team: Team; role: Role;
         </button>
       </footer>
     </Modal>
+  );
+}
+
+/** Which character an agent is drawn as in the office. */
+function Looks({
+  team,
+  role,
+  character,
+  onChange,
+}: {
+  team: Team;
+  role: Role;
+  character: string;
+  onChange: (p: Partial<Pick<Role, 'character'>>) => void;
+}) {
+  const wardrobe = useWardrobe();
+  const own = defaultCharacter(role);
+  const chosen = character || own;
+  if (!wardrobe) return <p className="settings-muted">Hämtar garderoben …</p>;
+  if (!wardrobe.characters.length)
+    return <p className="settings-muted">Garderoben är tom. Den byggs med node scripts/characters.mjs build.</p>;
+  // The role's own first, then the templates, then the wardrobe.
+  const list = [...wardrobe.characters].sort((a, b) => Number(b.id === own) - Number(a.id === own));
+  const built = wardrobe.characters.find((c) => c.id === chosen)?.built;
+  return (
+    <div className="form">
+      {built && (
+        <Suspense fallback={<div className="looks-preview" />}>
+          <Preview character={chosen} />
+        </Suspense>
+      )}
+      <fieldset className="field looks">
+        <span>Gubbe</span>
+        <div className="looks-grid" role="radiogroup" aria-label="Gubbe">
+          {list.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="radio"
+              aria-checked={chosen === c.id}
+              className="looks-pick"
+              title={c.built ? c.label : `${c.label} (ritas i lera tills 3D-modellen finns)`}
+              onClick={() => onChange({ character: c.id === own ? '' : c.id })}
+            >
+              <img src={c.id === own && !character ? avatarUrl(team.id, role) : portraitUrl(c.id)} alt="" loading="lazy" />
+              <span>{c.id === own ? `${c.label} (standard)` : c.label}</span>
+            </button>
+          ))}
+        </div>
+      </fieldset>
+    </div>
   );
 }

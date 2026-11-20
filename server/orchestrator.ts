@@ -7,6 +7,8 @@ import { onCardsCreated, onMessageCard } from './mcp.ts';
 import { startWatching } from './watch.ts';
 import { startMonitors } from './monitors.ts';
 import { startHandoff } from './handoff.ts';
+import { cardFinished, startStraySweep } from './strays.ts';
+import { cardLeftApps, startDevApps } from './devapps.ts';
 
 /**
  * Starts queued cards whose dependencies are done, up to the concurrency cap.
@@ -65,8 +67,14 @@ export function startScheduler() {
   startWatching(tick);
   startMonitors();
   startHandoff();
+  startDevApps();
+  startStraySweep();
   bus.on((m) => {
     if (m.type === 'subtask' && m.subtask.status !== 'running') tick();
+    if (m.type === 'subtask') {
+      cardFinished(m.subtask);
+      cardLeftApps(m.subtask);
+    }
   });
   tick();
 }

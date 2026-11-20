@@ -1,3 +1,4 @@
+import { consultantServers, consultantsSection } from './consultants.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from './proc.ts';
 import { createInterface } from 'node:readline';
 import { mkdirSync } from 'node:fs';
@@ -8,10 +9,11 @@ import { NEVER, claudeEnv, contextOf, describeTool, toolResultText, userLine } f
 import { issueToken, releaseLocks, revokeToken, takeReport, toolGuide } from './mcp.ts';
 import { bus } from './bus.ts';
 import { addEvent, getMark, getSubtask, setMark, updateSubtask, type EventKind, type Subtask } from './db.ts';
-import { getTeam, peopleNames, peopleSection, readNotes, repoFor, type Role, type Team } from './roles.ts';
+import { getTeam, peopleNames, peopleSection, readNotes, repoFor, who, type Role, type Team } from './roles.ts';
 import { withOwner } from './owner.ts';
 import { IMAGES_DIR, shownText } from './images.ts';
 import { infraEnv, infraSection } from './infra.ts';
+import { devAppsSection } from './devapps.ts';
 import { accountStatus, getAccount } from './accounts.ts';
 import { ensureWorktree } from './worktree.ts';
 import { serversFor, teamSecrets } from './mcp-servers.ts';
@@ -138,13 +140,53 @@ function patch(id: number, p: Parameters<typeof updateSubtask>[1]) {
   return subtask;
 }
 
+/** The project's own shared resources and the scripts that start its app. */
+function sharedSection(team: Team): string {
+  const parts: string[] = [];
+  const res = Object.entries(team.resources);
+  if (res.length)
+    parts.push(
+      `## Delade resurser\n\nBara ett kort åt gången (eller flera på samma branch). Ta den med acquire_resource och ange what (branch eller PR) innan du startar något på den; släpp den med release_resource när du är klar och har stoppat dina servrar.\n${res
+        .map(([id, r]) => `- \`${id}\`: ${r.label}${r.ports.length ? ` (portar ${r.ports.join(', ')})` : ''}`)
+        .join('\n')}`,
+    );
+  parts.push(
+    '## Uppgiftens titel\n\nTiteln på boarden är först det som skrevs. Är ditt kort överst i uppgiften (utan förälder) och vet du mer, till exempel att den gäller ett ärende med nummer: sätt en bättre titel med `set_task_title`, med ärendets titel och nummer ("US 2491: Radera inaktiva användare").',
+  );
+  // Law and policy go through the team's own lawyer, whoever notices.
+  const lawyer = team.roles.find((r) => r.id === 'jurist' || /jurist/i.test(r.name));
+  if (lawyer)
+    parts.push(
+      `## Juridik\n\nPåverkar något du gör en lag- eller policytext, koppla in ${lawyer.nick ? `${lawyer.nick} (${lawyer.name})` : lawyer.name}, \`${lawyer.id}\`, med delegate och berätta vad som ändras och varför. Det gäller till exempel nya personuppgifter som samlas in eller sparas längre, en ny tredjepart, SDK eller underbiträde (analys, felrapportering, betalning, e-post), cookies och lokal lagring, ändrade villkor, priser eller abonnemang, åldersgränser, och data som flyttas till ett annat land. Hellre en gång för mycket. Är du själv ${lawyer.nick || lawyer.name}: det här är ditt.`,
+    );
+  const consultants = consultantsSection(team.id);
+  if (consultants) parts.push(consultants);
+  // The control room runs the apps: the scripts are what their commands start, not for the agents to run.
+  if (team.devApps.length) {
+    parts.push(devAppsSection(team));
+    if (team.runScripts.length)
+      parts.push(
+        `Apparnas kommandon använder skripten i ${team.runScripts.map((x) => x.path).join(', ')}. Startar en app inte för att skriptet är fel, rätta skriptet (det ligger utanför repot) och kör use_app igen, och säg vad du ändrat i din rapport.`,
+      );
+  } else if (team.runScripts.length)
+    parts.push(
+      `## Starta appen\n\nSå här startas appen, på samma sätt som de som jobbar i projektet gör. Använd skripten i stället för att sätta ihop det själv. Fungerar något inte: rätta skriptet (det ligger utanför repot) så att nästa kort slipper, och säg vad du ändrat i din rapport.\n\n${team.runScripts
+        .map((x) => `### ${x.path}\n\n${x.about}`)
+        .join('\n\n')}`,
+    );
+  return parts.join('\n\n');
+}
+
 function systemPrompt(team: Team, role: Role, subtask: Subtask, prHow: string): string {
   const parts = [
     team.prompt,
-    `## Din roll: ${role.name} i team ${team.name}\n\n${role.prompt}`,
+    `## Din roll: ${role.name} i team ${team.name}${role.nick ? `\n\nDu heter ${role.nick}. Så kallar alla i projektet dig.` : ''}\n\n${role.prompt}`,
     role.owns.length ? `Du äger: ${role.owns.join(', ')}.` : '',
     peopleSection(team),
-    `## Teamet\n\n${team.roles.map((r) => `- ${r.id}: ${r.name}, ${r.title}${team.repos.length > 1 && r.repos.length ? ` (repo: ${r.repos.join(', ')})` : ''}`).join('\n')}`,
+    `## Teamet\n\n${team.roles.map((r) => `- ${r.id}: ${who(r)}, ${r.title}${team.repos.length > 1 && r.repos.length ? ` (repo: ${r.repos.join(', ')})` : ''}`).join('\n')}${
+      team.roles.some((r) => r.nick) ? '\n\nAgenter med namn kallas vid namn, i text och när ni pratar med varandra. Där ett verktyg vill ha en agent går både roll-id och namn.' : ''
+    }`,
+    sharedSection(team),
     team.repos.length > 1
       ? `## Repona\n\nProjektet är flera repon i ${team.repo}:\n${team.repos.map((r) => `- ${r.id}: ${r.path} (basbranch ${r.baseBranch})`).join('\n')}\n\n${
           role.worktree
@@ -420,7 +462,8 @@ async function launch(
     '--mcp-config', JSON.stringify({
       mcpServers: {
         // Only the servers this role is given: each one's instructions are read on every step.
-        ...serversFor(team, role),
+        // Its own servers, and those of the consultants it may ask that are reached through MCP.
+        ...serversFor(team, role.mcp === 'all' ? role : { mcp: [...new Set([...role.mcp, ...consultantServers(team.id, role.id)])] }),
         'control-room': { type: 'http', url: `http://127.0.0.1:${PORT}/mcp`, headers: { Authorization: `Bearer ${token}` } },
       },
     }),

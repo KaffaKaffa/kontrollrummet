@@ -18,3 +18,15 @@ teams/*/roles/.removed/
 # The compressed copies in web/public are what the app uses.
 library/characters/**/*.glb
 library/office/*.glb
+library/accessories/*.glb
+# Secrets never go in git, here or anywhere: keys live in the keychain (macOS) or DPAPI (Windows).
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision

@@ -1,3 +1,26 @@
+import {
+  addConsultant,
+  consult,
+  consultantTemplates,
+  consultantView,
+  drawPortrait,
+  API_PROVIDERS,
+  KEY_PAGE,
+  SERVICES,
+  KEY_SERVICE,
+  PROVIDER_LABEL,
+  libraryFaces,
+  listModels,
+  loadConsultants,
+  pickPortrait,
+  providerStatus,
+  PROVIDERS,
+  removeConsultant,
+  saveConsultant,
+  type Consultant,
+  type ApiProvider,
+  type Provider,
+} from './consultants.ts';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
@@ -8,7 +31,9 @@ import { OWNER } from './owner.ts';
 import { bus } from './bus.ts';
 import {
   addEvent,
+  closeNotice,
   getSubtask,
+  setTaskTitle,
   listEvents,
   listSubtasks,
   listNotices,
@@ -16,7 +41,7 @@ import {
   listTasks,
   updateSubtask,
 } from './db.ts';
-import { decideApproval, handleMcp, listApprovals, lockHolders } from './mcp.ts';
+import { decideApproval, handleMcp, listApprovals, lockHolders, lockQueues } from './mcp.ts';
 import { IMAGE_MODEL, IMAGES_DIR, imagesAvailable, saveCardUpload } from './images.ts';
 import { getUsage, pausedUntilIso } from './usage.ts';
 import { accountsView, defaultAccountId, getAccount, identityTerminal } from './accounts.ts';
@@ -24,7 +49,8 @@ import { openTerminal } from './terminal.ts';
 import { availableServers, sourceLabel } from './mcp-servers.ts';
 import { existingIn, hostOfRepo, scanRepo, suggest, type GitHost } from './scan.ts';
 import { suggestPeople } from './people.ts';
-import { askInfra, cleanItems, infraLogin, infraStatus, setUpNewProject } from './infra.ts';
+import { allDevApps, logText, ownerAnswer, ownerHold, ownerStart, ownerStop, saveDevApps } from './devapps.ts';
+import { askDevApps, askInfra, cleanItems, infraLogin, infraStatus, setUpNewProject } from './infra.ts';
 import { testMonitors } from './monitors.ts';
 import { azureStatus, fixCheck, runChecks, targetForTeam, type CheckTarget } from './checks.ts';
 import { cancelMcpLogin, mcpLoginStatus, pasteMcpRedirect, startMcpLogin } from './mcp-login.ts';
@@ -93,11 +119,11 @@ import { delegateReview, planAction, submitTask, type PlanAction } from './actio
 import { handleDesk } from './desk.ts';
 import { getReleases } from './releases.ts';
 import { deployProd, deployTest, listJobs, prodPreview, releaseApproved } from './deploy.ts';
-import { checkPrNow } from './watch.ts';
+import { checkPrNow, ownPrs } from './watch.ts';
 import { figmaTitle } from './figma.ts';
 import { runningCount, startAgent, stopAgent, stopAll } from './agent.ts';
 import { startScheduler } from './orchestrator.ts';
-import { getTeam, loadTeams, rawNotes, saveNotes, saveRole, saveTeamPrompt } from './roles.ts';
+import { cleanDevApps, getTeam, loadTeams, rawNotes, saveNotes, saveRole, saveTeamPrompt } from './roles.ts';
 
 /**
  * Pages this server answers to. Anything else is a page on some other site
@@ -134,11 +160,16 @@ function text(body: Record<string, unknown>, key: string): string {
   return value.trim();
 }
 
+/** This process: the page reloads when it sees another one, so a restart brings the new web app too. */
+const BOOT = `${process.pid}-${Date.now()}`;
+
 function state() {
   return {
+    boot: BOOT,
     teams: loadTeams().map((t) => ({
       id: t.id,
       name: t.name,
+      color: t.color,
       repo: t.repo,
       account: t.account,
       baseBranch: t.baseBranch,
@@ -163,6 +194,10 @@ function state() {
     approvals: listApprovals(),
     notices: listNotices(),
     locks: lockHolders(),
+    lockQueues: lockQueues(),
+    devApps: allDevApps(),
+    ownPrs: ownPrs(),
+    consultants: Object.fromEntries(loadTeams().map((t) => [t.id, loadConsultants(t.id).map((c) => consultantView(t.id, c))])),
     images: { available: imagesAvailable(), model: IMAGE_MODEL },
     plans: listPlans(),
     jobs: listJobs().map((j) => ({ ...j, log: j.log.slice(-20_000) })),
@@ -273,9 +308,41 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
     }
   }
 
+  const taskTitle = /^\/api\/tasks\/(\d+)$/.exec(path);
+  if (req.method === 'PUT' && taskTitle) {
+    const title = text(await readJson(req), 'title').replace(/\s+/g, ' ').trim().slice(0, 120);
+    if (!title) throw new HttpError(400, 'tom titel');
+    try {
+      const task = setTaskTitle(Number(taskTitle[1]), title);
+      bus.emit({ type: 'task', task });
+      return json(res, 200, task);
+    } catch (err) {
+      throw new HttpError(404, (err as Error).message);
+    }
+  }
+
   if (req.method === 'GET' && path === '/api/link-title') {
     const href = new URL(req.url ?? '/', 'http://x').searchParams.get('url') ?? '';
     return json(res, 200, { title: await figmaTitle(href).catch(() => null) });
+  }
+
+  // ---- the project's local apps: the owner's buttons
+  const dev = /^\/api\/dev\/([\w-]+)\/([\w-]+)\/(log|start|stop|hold|answer)$/.exec(path);
+  if (dev) {
+    const [, teamId, appId, action] = dev;
+    try {
+      if (req.method === 'GET' && action === 'log') return json(res, 200, { text: logText(teamId, appId) });
+      if (req.method === 'POST') {
+        const body = await readJson(req);
+        if (action === 'start') await ownerStart(teamId, appId, typeof body.from === 'number' ? body.from : null, body.force === true);
+        if (action === 'stop') await ownerStop(teamId, appId);
+        if (action === 'hold') await ownerHold(teamId, appId, body.held === true);
+        if (action === 'answer') await ownerAnswer(teamId, appId, body.keep === true);
+        return json(res, 200, {});
+      }
+    } catch (err) {
+      throw new HttpError(409, (err as Error).message);
+    }
   }
 
   const rel = /^\/api\/teams\/([\w-]+)\/releases$/.exec(path);
@@ -381,7 +448,70 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
       skills: librarySkills(),
     });
   }
-  const proj = /^\/api\/teams\/([\w-]+)\/(settings|skills|roles|logo|people|azure|infra|monitors|review)(?:\/([\w-]+))?(?:\/(remove))?$/.exec(path);
+  // ---- Consultants: specialists the agents ask over an API (server/consultants.ts).
+  if (req.method === 'GET' && path === '/api/consultants/models') {
+    const provider = new URL(req.url ?? '/', 'http://x').searchParams.get('provider') as Provider;
+    if (!PROVIDERS.includes(provider)) throw new HttpError(400, 'okänd leverantör');
+    try {
+      return json(res, 200, { models: await listModels(provider) });
+    } catch (err) {
+      throw new HttpError(409, (err as Error).message);
+    }
+  }
+  const face = /^\/api\/faces\/([\w-]+)$/.exec(path);
+  if (req.method === 'GET' && face) {
+    // The library's faces (agents, the wardrobe, the consultant templates), to pick from.
+    const file = join(APP_ROOT, 'library', 'avatars', `${face[1]}.png`);
+    if (!existsSync(file)) throw new HttpError(404, 'inget ansikte');
+    res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-cache' });
+    return res.end(readFileSync(file));
+  }
+  if (req.method === 'POST' && path === '/api/consultants/key') {
+    // The owner pastes the key at a hidden prompt; it goes to the keychain (macOS) or DPAPI (Windows), never to a file here.
+    const provider = text(await readJson(req), 'provider') as ApiProvider;
+    if (!API_PROVIDERS.includes(provider)) throw new HttpError(400, 'leverantören har ingen API-nyckel här');
+    openTerminal({
+      banner: `API-nyckel för ${PROVIDER_LABEL[provider]} till kontrollrummets konsulter. Skapa en nyckel på sidan som öppnas, kopiera den och klistra in här.`,
+      url: KEY_PAGE[provider],
+      secret: { service: KEY_SERVICE[provider].service, prompt: 'Klistra in nyckeln (den syns inte när du klistrar) och tryck Enter:' },
+    });
+    return json(res, 202, {});
+  }
+  const cons = /^\/api\/teams\/([\w-]+)\/consultants(?:\/([\w-]+))?(?:\/(remove|portrait|face|try))?$/.exec(path);
+  if (cons) {
+    const [, teamId, id, action] = cons;
+    if (!getTeam(teamId)) throw new HttpError(404, 'teamet finns inte');
+    try {
+      if (req.method === 'GET' && !id)
+        return json(res, 200, {
+          consultants: loadConsultants(teamId).map((c) => consultantView(teamId, c)),
+          templates: consultantTemplates(),
+          providers: providerStatus(),
+          keys: KEY_SERVICE,
+          services: SERVICES,
+          faces: libraryFaces(),
+        });
+      const body = req.method === 'GET' ? {} : await readJson(req);
+      let result: unknown = {};
+      if (req.method === 'POST' && !id) result = await addConsultant(teamId, typeof body.template === 'string' && body.template ? body.template : null);
+      else if (req.method === 'PUT' && id && !action) result = saveConsultant(teamId, id, body as Partial<Consultant>);
+      else if (req.method === 'POST' && id && action === 'remove') removeConsultant(teamId, id);
+      else if (req.method === 'POST' && id && action === 'portrait') result = { portrait: await drawPortrait(teamId, id) };
+      else if (req.method === 'POST' && id && action === 'face') pickPortrait(teamId, id, text(body, 'face'));
+      else if (req.method === 'POST' && id && action === 'try') {
+        // The owner tries the consultant out from the settings.
+        const { answer } = await consult(teamId, id, text(body, 'question'));
+        result = { text: answer.text, images: answer.images.map((i) => i.url) };
+      } else throw new HttpError(405, 'stöds inte');
+      if (action !== 'try') bus.emit({ type: 'teams' });
+      return json(res, 200, result);
+    } catch (err) {
+      if (err instanceof HttpError) throw err;
+      throw new HttpError(409, (err as Error).message);
+    }
+  }
+
+  const proj = /^\/api\/teams\/([\w-]+)\/(settings|skills|roles|logo|people|azure|infra|monitors|review|dev-apps)(?:\/([\w-]+))?(?:\/(remove))?$/.exec(path);
   if (proj && !(proj[2] === 'roles' && req.method === 'PUT')) {
     const [, teamId, what, item, remove] = proj;
     const team = getTeam(teamId);
@@ -418,6 +548,11 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
         const body = await readJson(req);
         return json(res, 200, await askInfra(team, typeof body.text === 'string' ? body.text.slice(0, 4000) : ''));
       }
+      if (req.method === 'POST' && what === 'dev-apps' && item === 'ask') {
+        // How the project runs locally: the agent's list, checked and saved like the infrastructure.
+        const body = await readJson(req);
+        return json(res, 200, await askDevApps(team, typeof body.text === 'string' ? body.text.slice(0, 4000) : ''));
+      }
       if (req.method === 'POST' && what === 'infra' && item === 'login') {
         const body = await readJson(req);
         return json(res, 200, { message: infraLogin(team, text(body, 'item')) });
@@ -436,9 +571,13 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
         return json(res, 202, {});
       }
       if (req.method === 'PUT' && what === 'settings') {
-        const body = (await readJson(req)) as Parameters<typeof saveTeamSettings>[1] & { infraItems?: unknown };
+        const body = (await readJson(req)) as Parameters<typeof saveTeamSettings>[1] & { infraItems?: unknown; devApps?: unknown };
         // The list as the page sends it is checked like an agent's: never trusted as is.
-        saveTeamSettings(teamId, { ...body, ...(body.infraItems !== undefined ? { infraItems: cleanItems(body.infraItems) } : {}) });
+        saveTeamSettings(teamId, {
+          ...body,
+          ...(body.infraItems !== undefined ? { infraItems: cleanItems(body.infraItems) } : {}),
+          ...(body.devApps !== undefined ? { devApps: cleanDevApps(body.devApps) } : {}),
+        });
         return json(res, 200, {});
       }
       if (req.method === 'POST') {
@@ -531,6 +670,25 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
     } catch (err) {
       throw new HttpError(409, (err as Error).message);
     }
+  }
+
+  // A notice from an agent: "Klart" closes it and tells the card it is done, "Stäng" only closes it.
+  const notice = /^\/api\/notices\/(\d+)\/(done|close)$/.exec(path);
+  if (req.method === 'POST' && notice) {
+    await readJson(req);
+    const closed = closeNotice(Number(notice[1]));
+    if (!closed) throw new HttpError(404, 'notisen finns inte');
+    bus.emit({ type: 'notice', notice: closed });
+    const card = closed.subtaskId != null ? getSubtask(closed.subtaskId) : undefined;
+    if (notice[2] === 'done' && card) {
+      const said = closed.text.length > 1200 ? `${closed.text.slice(0, 1200)} …` : closed.text;
+      void startAgent(
+        card.id,
+        `[Kontrollrummet] ${OWNER} har markerat din notis som klar, alltså gjort det som stod i den:\n\n> ${said.replaceAll('\n', '\n> ')}\n\nFortsätt med det som väntade på det, om något gjorde det. Annars: ingen åtgärd, avsluta med report som förut.`,
+        { wake: true },
+      ).catch(() => undefined);
+    }
+    return json(res, 200, {});
   }
 
   const approval = /^\/api\/approvals\/([\w-]+)$/.exec(path);
@@ -743,6 +901,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
     stopAll();
     stopAllConversations();
+    saveDevApps();
     server.close();
     process.exit(0);
   });

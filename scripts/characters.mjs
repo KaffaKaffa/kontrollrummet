@@ -7,7 +7,7 @@
 //   node scripts/characters.mjs animations         klippen, en gång på en referensgubbe (3/klipp, 13/egen rörelse)
 //   node scripts/characters.mjs props [id …]       inredning och arbetsplatser ur web/src/office3d/catalog.json (15/30 per sak)
 //   node scripts/characters.mjs art                tavlor till väggarna, med OpenAI (inga Meshy-krediter)
-//   node scripts/characters.mjs build              gubbar, klipp och inredning till web/public/, mindre texturer
+//   node scripts/characters.mjs build              gubbar, klipp, inredning och garderoben till web/public/
 //   node scripts/characters.mjs all                allt i tur och ordning
 //
 //   --max-credits N   stanna innan förbrukningen i den här körningen passerar N (standard 700)
@@ -32,6 +32,8 @@ const API2 = 'https://api.meshy.ai/openapi/v2';
 const office = join(root, 'library/office');
 const officeOut = join(root, 'web/public/office');
 const catalog = JSON.parse(readFileSync(join(root, 'web/src/office3d/catalog.json'), 'utf8'));
+/** Characters to pick from besides the templates (avatars.mjs --wardrobe draws them). */
+const wardrobe = JSON.parse(readFileSync(join(lib, 'wardrobe.json'), 'utf8'));
 const args = process.argv.slice(2);
 const command = args[0] ?? 'help';
 const flags = new Set(args.filter((a) => a.startsWith('--')));
@@ -183,7 +185,7 @@ async function download(url, file) {
 /** Height per character from its look, so a tall lead and a small designer stand as they are drawn. */
 function heightOf(id) {
   const H = { teamleader: 1.78, architect: 1.68, bug: 1.7, designer: 1.58, tester: 1.64, web: 1.66, backend: 1.82, ios: 1.76, android: 1.56, mac: 1.9, windows: 1.7, fullstack: 1.7, devops: 1.74, docs: 1.56 };
-  return H[id] ?? 1.7;
+  return H[id] ?? wardrobe.characters.find((c) => c.id === id)?.height ?? 1.7;
 }
 
 async function models(ids) {
@@ -434,6 +436,31 @@ async function build() {
     await io.write(join(out, `${id}.glb`), doc);
     console.log(`${id}.glb`);
   }
+
+  // What the office and the picker can choose from.
+  const portraits = join(out, 'portraits');
+  mkdirSync(portraits, { recursive: true });
+  const avatars = join(root, 'library/avatars');
+  for (const f of readdirSync(avatars).filter((x) => x.endsWith('.png'))) writeFileSync(join(portraits, f), readFileSync(join(avatars, f)));
+  const templates = readdirSync(join(root, 'library/roles'))
+    .filter((f) => f.endsWith('.md'))
+    .map((f) => ({ id: f.slice(0, -3), label: /^name:\s*(.+)$/m.exec(readFileSync(join(root, 'library/roles', f), 'utf8'))?.[1] ?? f.slice(0, -3) }));
+  const rigged = (id) => Boolean(manifest.characters[id]?.rigged);
+  writeFileSync(
+    join(out, 'wardrobe.json'),
+    `${JSON.stringify(
+      {
+        characters: [
+          ...templates.map((t) => ({ ...t, built: rigged(t.id) })),
+          ...wardrobe.characters
+            .filter((c) => existsSync(join(avatars, `${c.id}.png`)))
+            .map(({ id, label, base, style }) => ({ id, label, ...(base ? { base } : {}), style, built: rigged(id) })),
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+  );
 
   // Every clip into one file, retargeted by bone name onto one skeleton, renamed to our names.
   const refFile = join(lib, REFERENCE, 'rigged.glb');

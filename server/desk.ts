@@ -7,7 +7,7 @@ import { planAction, submitTask, type PlanAction } from './actions.ts';
 import { getSubtask, listEvents, listNotices, listPlans, listSubtasks, listTasks, type Subtask } from './db.ts';
 import { isRunning, startAgent } from './agent.ts';
 import { decideApproval, listApprovals } from './mcp.ts';
-import { loadTeams, type Team } from './roles.ts';
+import { loadTeams, whoIn, type Team } from './roles.ts';
 import { scanRepo } from './scan.ts';
 import { createProject, librarySkills, listTemplates } from './project.ts';
 import { accountsView, defaultAccountId } from './accounts.ts';
@@ -46,7 +46,7 @@ function card(id: unknown): Subtask {
 }
 
 const line = (s: Subtask) =>
-  `#${s.id} ${s.agent} [${s.status}] ${s.brief.split('\n')[0].slice(0, 120)}${s.prUrl ? ` · ${s.prUrl}` : ''}`;
+  `#${s.id} ${whoIn(s.team, s.agent)} [${s.status}] ${s.brief.split('\n')[0].slice(0, 120)}${s.prUrl ? ` · ${s.prUrl}` : ''}`;
 
 /** Wait for a card's turn to end, so the answer can go straight back to the app. */
 async function waitForTurn(id: number, maxMinutes: number): Promise<Subtask> {
@@ -142,7 +142,7 @@ export const DESK_TOOLS: DeskTool[] = [
     },
     run: (a) => {
       const { subtask } = submitTask(team(a.team).id, String(a.text), a.agent || undefined);
-      return `Lämnat som kort #${subtask.id} till ${subtask.agent}.`;
+      return `Lämnat som kort #${subtask.id} till ${whoIn(subtask.team, subtask.agent)}.`;
     },
   },
   {

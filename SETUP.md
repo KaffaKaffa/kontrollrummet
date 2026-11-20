@@ -53,7 +53,7 @@ npm run install:windows
 ```
 Det bygger `Kontrollrummet.exe` i `%LOCALAPPDATA%\Kontrollrummet` och lägger det i Autostart, Start-menyn och på skrivbordet.
 
-En OpenAI-nyckel är valfri (porträtt och loggor ritas med den). Har personen en och vill använda den: sätt `OPENAI_API_KEY` i miljön för installationskommandot, så sparas den i nyckelringen (macOS) eller krypterad för användaren (Windows). Skriv den aldrig i en fil.
+API-nycklar till OpenAI och Google Gemini är valfria (porträtt, loggor och konsulter). De läggs enklast in i appen efteråt, under Inställningar → Konsulter → API-nycklar: knappen öppnar sidan där nyckeln skapas och ett terminalfönster där personen klistrar in den, och den sparas i nyckelringen (macOS) eller krypterad för användaren (Windows). Det går också att sätta `OPENAI_API_KEY` i miljön för installationskommandot. Skriv aldrig en nyckel i en fil.
 
 Kontrollera sedan att servern svarar: `http://127.0.0.1:4317/` ska ge 200 inom en halv minut.
 

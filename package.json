@@ -9,6 +9,7 @@
     "start": "vite build --config web/vite.config.ts && node --disable-warning=ExperimentalWarning server/main.ts",
     "build": "vite build --config web/vite.config.ts",
     "typecheck": "tsc -p . --noEmit",
+    "check:public": "node scripts/check-public.mjs",
     "tokens:sync": "node scripts/sync-tokens.mjs",
     "install:mac": "scripts/install-mac.sh",
     "uninstall:mac": "scripts/uninstall-mac.sh",

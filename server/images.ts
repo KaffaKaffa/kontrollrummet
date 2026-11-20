@@ -2,11 +2,14 @@ import { copyFileSync, existsSync, mkdirSync, statSync, writeFileSync } from 'no
 import { basename, dirname, extname, join, normalize, resolve } from 'node:path';
 import { DATA_DIR, HOST, PORT } from './config.ts';
 import { slug } from './worktree.ts';
+import { readSecret } from './secrets.ts';
 
 export const IMAGES_DIR = join(DATA_DIR, 'images');
 export const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-2';
 
-export const imagesAvailable = () => Boolean(process.env.OPENAI_API_KEY);
+/** The OpenAI key: the environment, else the keychain (macOS) or DPAPI (Windows) where the app saves it. */
+const openAiKey = () => process.env.OPENAI_API_KEY || readSecret('control-room-openai');
+export const imagesAvailable = () => Boolean(openAiKey());
 
 export interface GeneratedImage {
   /** Where the image is on disk, in the control room's own store. */
@@ -31,15 +34,17 @@ export async function generateImage(opts: {
   /** A path relative to the agent's worktree to copy the result to. */
   saveTo?: string;
   worktree?: string | null;
+  /** An image consultant's own model; else the control room's. */
+  model?: string;
 }): Promise<GeneratedImage> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error('OPENAI_API_KEY saknas för kontrollrummets server');
+  const key = openAiKey();
+  if (!key) throw new Error('Ingen OpenAI-nyckel: lägg in den under Inställningar → Konsulter');
 
   const res = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: IMAGE_MODEL,
+      model: opts.model || IMAGE_MODEL,
       prompt: opts.prompt,
       size: opts.size ?? '1024x1024',
       n: 1,
