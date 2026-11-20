@@ -2,6 +2,7 @@
   "name": "control-room",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "description": "Kontrollrummet: agentteam per repo, en agent per app, och en board där varje uppgift går att följa.",
   "type": "module",
   "scripts": {
