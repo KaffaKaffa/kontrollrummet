@@ -49,6 +49,8 @@ flowchart LR
     TL -- kort --> DS["Designer"]
     D --> WT["egen worktree<br/>och branch"]
     DS --> WT
+    D -. fråga .-> K["🎓 Konsulter<br/>jurist, illustratör …"]
+    DS -. fråga .-> K
     WT --> PR["PR"]
     PR --> T["Testare"]
     T --> IN["📥 Inkorgen"]
@@ -66,6 +68,7 @@ flowchart LR
 | 📐 | **Planer** | Arkitektens planer, som du genomför, parkerar eller kastar. |
 | 🚀 | **Releases** | Vilken version av varje app som ligger i test, är på väg och är ute i App Store, Google Play och Microsoft Store, med knappar för testbuild och prod. |
 | 🎩 | **Gudfadern** | Din egen Claude utan team, i valfri mapp och på valfritt konto. Här bygger du vidare på kontrollrummet, och den ersätter Claude Code-appen. |
+| 🎓 | **Konsulter** | Specialister som agenterna frågar över API i stället för kollegor på kontoret: en jurist på en modell som är bra på juridik, en illustratör som ritar, en översättare, en säkerhetstestare. De bygger på andra modeller än Claude (OpenAI, Gemini, Grok, Perplexity med flera) och svarar på en fråga i taget, och agenten gör jobbet med svaret. Du väljer vem som får fråga och när du vill ge ditt samtycke. |
 | 📥 | **Inkorgen** | Det som väntar på dig: beslut, godkännanden, PR:er att merga och PR:er att granska. En PR som du ombetts granska kan du ge till teamleadern med ett klick. |
 | ☁️ | **Infrastruktur och loggning** | Var varje projekt körs (moln, konton, resurser) och var felen läses, identifierat av en agent och redigerbart. |
 | 💻 | **En egen app** | Kontrollrummet.app på Macen och Kontrollrummet.exe på Windows, med systemnotiser när något är klart eller behöver dig. |
@@ -307,6 +310,15 @@ Prompten byggs i den här ordningen: `shared.md` i roten (gäller alla team), te
 ### Anteckningar per roll
 `teams/<id>/notes/<roll>.md` är det en roll har lärt sig i repot: kommandon som fungerar, fallgropar och var saker ligger. Filen läggs in i varje nytt korts prompt, så att agenten inte börjar från noll, och agenterna fyller på den själva med `save_note`. Läs och rensa filen ibland. Den checkas in, så att andra som kör samma team får samma kunskap.
 
+### Konsulter
+- Läggs till under Inställningar → Konsulter, från mallarna i `library/consultants` (jurist, illustratör, copywriter, översättare, SEO, tillgänglighet, säkerhetstestare, ekonom, musik, video, 3D med flera) eller från början. De sparas i `teams/<id>/consultants/<id>.md`: front matter, sedan instruktionerna.
+- Varje konsult har ett namn, ett porträtt, vad man frågar den om, en tjänst och modell, och egna instruktioner. Mallen tipsar om vilka tjänster som är bra på just det.
+- **Över API** (OpenAI, Gemini, Grok, Perplexity): kontrollrummet ställer frågan och lämnar svaret till agenten. Textkonsulter kan få söka på webben, och bilder sparas, visas på kortet och kan kopieras in i worktreen.
+- **Via MCP** (till exempel Runway, ElevenLabs, Suno, Meshy): agenten får tjänstens MCP-server och använder dess verktyg med konsultens instruktioner.
+- Agenterna frågar med `consult`. Konsulten ser inte repot eller kortet, så frågan ska bära allt den behöver veta, och inga personuppgifter, kunddata eller hemligheter.
+- **Vem som får fråga:** alla, eller valda roller. Andra får be någon av dem med `delegate`.
+- **Samtycke:** varje fråga, en gång per kort eller aldrig. Frågan hamnar i Inkorgen.
+
 ### Porträtt och utseende
 - `node scripts/avatars.mjs` genererar ett porträtt per mall i `library/roles` med OpenAI, utifrån `look` och `vibe`, till `library/avatars/<id>.png`. Skriptet gör bara de som saknas. `--force` gör om, `--body` gör också en helkroppsbild till 3D-gubben, `--sync` kopierar porträtten till teamens roller (`web/public/avatars/<team>-<roll>.png`), och `--prompts` skriver bara ut promptarna.
 
@@ -432,7 +444,7 @@ Testaren och utvecklarna kan be om att få starta VM:en med `start_vm`. Frågan 
   - `list_board`, `get_subtask`, `update_subtask`, `reply_to_card`, `notify_user`
   - `save_plan`
   - `acquire_resource`, `release_resource`, `start_vm`
-  - `generate_image`, `show_image`
+  - `generate_image`, `show_image`, `consult`
 - **Godkännanden:** det auto-läget skulle fråga om går till Inkorgen. Obesvarat är nej efter 30 minuter.
 - **Standup:** teamleaderns stående kort "Boarden" väcks var 30:e minut när något har ändrats eller stannat upp, och annars högst var sjätte timme.
 - **Synkvakten** tittar var tionde minut på mergade PR:er som rör `figmaSync`.
