@@ -97,7 +97,6 @@ const names = (d: Director, ids: string[]) => {
 /** Duties that leave no running card on the desk, as the office shows them. */
 const DUTY: Partial<Record<Agent['duty'], string>> = {
   queue: 'Står i kö vid kaffemaskinen tills det blir hens tur',
-  pr: 'Lutar sig bakåt med händerna bakom huvudet, väntar på granskning',
   sleep: 'Sover på skrivbordet: kvoten är slut',
   despair: 'Huvudet i händerna efter ett kort som gick fel',
 };

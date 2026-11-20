@@ -728,7 +728,6 @@ function Desk({ role, board, index, loadEvents, life }: { role: Role; board: Tea
 /** A duty with no running card on the desk, as a badge. */
 const DUTY_BADGE: Partial<Record<Duty, string>> = {
   queue: 'I kö',
-  pr: 'Väntar på granskning',
   sleep: 'Kvoten slut',
   despair: 'Misslyckades',
 };
