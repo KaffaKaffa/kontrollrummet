@@ -5,7 +5,7 @@ import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNo
 import * as THREE from 'three';
 import { avatarUrl, type Approval, type Role, type Subtask, type Task } from '../api.ts';
 import { Character } from './Character.tsx';
-import { characterOf, styleOf } from './characters.ts';
+import { characterOf, jobOf, styleOf } from './characters.ts';
 import { ModelCharacter } from './ModelCharacter.tsx';
 import { Artwork, Asset, useOfficeIndex, workstationOf } from './assets.tsx';
 import type { Agent, Director } from './director.ts';
@@ -148,7 +148,7 @@ function Label({ agent, hovered }: { agent: () => Agent; hovered: boolean }) {
             {state.bubble && <span className="o3d-mark">{state.bubble}</span>}
             {hovered && (
               <span className="o3d-text">
-                <strong>{a.role.name}</strong> · {DUTY_TEXT[state.duty] ?? state.duty}
+                <strong>{a.role.nick ? `${a.role.nick} (${a.role.name})` : a.role.name}</strong> · {DUTY_TEXT[state.duty] ?? state.duty}
                 {state.brief && <em>{state.brief}</em>}
               </span>
             )}
@@ -187,7 +187,7 @@ function Person({ director, id, team, built, onOpen }: { director: Director; id:
   const get = () => director.agents.get(id)!;
   const a = get();
   const character = characterOf(a.role);
-  const clay = <Character agent={get} style={styleOf(a.role)} portrait={avatarUrl(team, a.role.id)} onClick={() => onOpen(get())} onHover={setHovered} />;
+  const clay = <Character agent={get} style={styleOf(a.role)} portrait={avatarUrl(team, a.role)} onClick={() => onOpen(get())} onHover={setHovered} />;
   return (
     <>
       {built.has(character) ? (
@@ -261,7 +261,7 @@ export default function Office3D(props: Office3DProps) {
           <Walls layout={layout} />
           {[...layout.desks.values()].map((d) => {
             const role = roles.find((r) => r.id === d.roleId);
-            const ws = role ? workstationOf(characterOf(role), role.kind) : '';
+            const ws = role ? workstationOf(jobOf(role), role.kind) : '';
             const deskModel = d.kind === 'lead' ? 'lead_desk' : 'desk';
             return (
             <group key={d.roleId}>

@@ -1,4 +1,4 @@
-import { providerFor } from './git.ts';
+import { providerFor, type OwnPr, type PrFeedback } from './git.ts';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DATA_DIR } from './config.ts';
@@ -15,11 +15,12 @@ import {
   listTasks,
   updatePlan,
   updateSubtask,
+  type PrReview,
   type Subtask,
   type SubtaskStatus,
 } from './db.ts';
 import { isRunning, startAgent } from './agent.ts';
-import { getTeam, loadTeams, peopleNames, repoFor } from './roles.ts';
+import { getTeam, loadTeams, nameIn, peopleNames, repoFor, whoIn, type Team } from './roles.ts';
 
 
 /** Statuses a parent wants to hear about. Starting and running are noise. */
@@ -93,7 +94,7 @@ function flush(parentId: number) {
     .filter((s): s is Subtask => Boolean(s))
     .map((s) => {
       const said = s.summary ? `\n  Sa: ${s.summary.slice(0, 600).replaceAll('\n', '\n  ')}` : '';
-      return `- Kort #${s.id} (${s.agent}) ${STATUS_TEXT[s.status]}${s.prUrl ? `: ${s.prUrl}` : ''}.${said}`;
+      return `- Kort #${s.id} (${whoIn(s.team, s.agent)}) ${STATUS_TEXT[s.status]}${s.prUrl ? `: ${s.prUrl}` : ''}.${said}`;
     });
   if (!lines.length) return;
   const message = [
@@ -124,12 +125,13 @@ async function settlePr(s: Subtask): Promise<string> {
   const repo = repoFor(team, team.roles.find((r) => r.id === s.agent), s);
   const host = await providerFor(repo.path);
   if (!host) throw new Error('repot har ingen GitHub- eller Azure DevOps-remote');
-  const { state, mergeable } = await host.prState(s.prUrl, repo.path, { account: team.account, azureConfigDir: team.azureConfigDir });
+  const { state, mergeable, review } = await host.prState(s.prUrl, repo.path, { account: team.account, azureConfigDir: team.azureConfigDir });
+  if (state === 'OPEN') noteReview(s, team, review);
   if (state === 'OPEN' && mergeable === 'CONFLICTING') {
     if (!conflicted.has(s.id)) {
       // Once per conflict: the agent that owns the PR brings main in and pushes, then it is mergeable again.
       conflicted.add(s.id);
-      bus.emit({ type: 'event', event: addEvent(s.id, 'status', `PR #${s.prNumber} har merge-konflikter mot ${repo.baseBranch}. Agenten löser dem.`) });
+      bus.emit({ type: 'event', event: addEvent(s.id, 'status', `PR #${s.prNumber} har merge-konflikter mot ${repo.baseBranch}. ${nameIn(s.team, s.agent)} löser dem.`) });
       void startAgent(
         s.id,
         `[Kontrollrummet] PR #${s.prNumber} har merge-konflikter mot ${repo.baseBranch}. Hämta origin/${repo.baseBranch}, merga in den i din branch, lös konflikterna så att båda ändringarna finns kvar, kör testerna och pusha. Rapportera pr-open igen när PR:en går att merga. Ligger konflikten i en annan agents område och kräver deras kunskap, delegera den med delegate i stället för att gissa. Är en konflikt ett beslut snarare än en sammanfogning: rapportera needs-you med valet som question och alternativen som options.`,
@@ -149,13 +151,144 @@ async function settlePr(s: Subtask): Promise<string> {
   return state;
 }
 
+/** "Kim" for kim.svensson when the project lists them; the account otherwise. */
+function personFor(team: Team, account: string): string {
+  const a = account.toLowerCase();
+  return team.people.find((p) => p.account?.toLowerCase() === a || p.name.toLowerCase() === a)?.name ?? account.replace(/@.*/, '');
+}
+
+const names = (list: string[]) => (list.length < 2 ? list.join('') : `${list.slice(0, -1).join(', ')} och ${list.at(-1)}`);
+
+/**
+ * Keeps the card's view of its PR's reviewers. A PR waiting for someone else's
+ * approval is nothing for the owner to merge yet and nothing for the agent to
+ * do; once it is approved the owner hears it is ready, once.
+ */
+function noteReview(s: Subtask, team: Team, raw: PrReview) {
+  const review: PrReview = { state: raw.state, who: raw.who.map((w) => personFor(team, w)) };
+  const before = s.review;
+  if (before && before.state === review.state && before.who.join() === review.who.join()) return;
+  bus.emit({ type: 'subtask', subtask: updateSubtask(s.id, { review }) });
+  // Several cards can share a PR (the author's and a tester's): the first tells.
+  const first = !listSubtasks().some((o) => o.id < s.id && o.status === 'pr-open' && o.prUrl === s.prUrl);
+  if (!first) return;
+  const pr = `PR #${s.prNumber}`;
+  if (review.state === 'waiting') {
+    bus.emit({ type: 'event', event: addEvent(s.id, 'status', `${pr} väntar på godkännande${review.who.length ? ` från ${names(review.who)}` : ''}.`) });
+  } else if (review.state === 'approved' && before?.state && before.state !== 'approved' && before.state !== 'none') {
+    bus.emit({ type: 'event', event: addEvent(s.id, 'status', `${pr} är godkänd${review.who.length ? ` av ${names(review.who)}` : ''}. Redo att merga.`) });
+    const notice = addNotice(team.id, s.id, `${pr} är godkänd${review.who.length ? ` av ${names(review.who)}` : ''} och kan mergas: ${s.prUrl}`);
+    bus.emit({ type: 'notice', notice });
+  } else if (review.state === 'changes') {
+    bus.emit({ type: 'event', event: addEvent(s.id, 'status', `${names(review.who) || 'En granskare'} vill ha ändringar i ${pr}. ${nameIn(s.team, s.agent)} får kommentarerna.`) });
+  }
+}
+
 async function checkPrs() {
   for (const s of listSubtasks()) {
     if (s.status !== 'pr-open' || !s.prUrl || isRunning(s.id)) continue;
     // gh offline or rate limited: try again next round.
     await settlePr(s).catch(() => undefined);
   }
+  await checkFeedback().catch(() => undefined);
   closeIdleWatchers();
+}
+
+// ---------------------------------------------------------------- reviews on our PRs
+
+const FEEDBACK_FILE = join(DATA_DIR, 'pr-feedback.json');
+/** Older than this the first time a PR is looked at: from before the watch, already seen to. */
+const BACKFILL_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * Per PR: the feedback already handed to its agent, and when the agent was
+ * last woken for it, so its own replies (as the same account) are not new feedback.
+ */
+interface FeedbackState {
+  seen: string[];
+  wokeAt?: string;
+}
+
+function feedbackState(): Record<string, FeedbackState> {
+  try {
+    return existsSync(FEEDBACK_FILE) ? (JSON.parse(readFileSync(FEEDBACK_FILE, 'utf8')) as Record<string, FeedbackState>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function feedbackLine(f: PrFeedback): string {
+  const head = [f.author, f.state && f.state !== 'COMMENTED' ? f.state : '', f.where, f.reply ? 'svar i tråd' : ''].filter(Boolean).join(', ');
+  const body = f.body.trim().length > 1500 ? `${f.body.trim().slice(0, 1500)} …` : f.body.trim();
+  return `- ${head}:\n  ${body.replaceAll('\n', '\n  ')}`;
+}
+
+/**
+ * Reviews and comments on the cards' open PRs, from people or bots such as
+ * Copilot: what is new goes to the agent that owns the PR, as one wake-up per
+ * PR, to fix what is right, answer what is not and push.
+ */
+async function checkFeedback() {
+  const state = feedbackState();
+  const open = listSubtasks().filter((s) => s.status === 'pr-open' && s.prUrl);
+  const byPr = new Map<string, Subtask[]>();
+  for (const s of open) byPr.set(s.prUrl!, [...(byPr.get(s.prUrl!) ?? []), s]);
+  const next: Record<string, FeedbackState> = {};
+  for (const [url, cards] of byPr) {
+    next[url] = state[url] ?? { seen: [] };
+    // Someone is at work on the PR: their replies are not done yet, look next round.
+    if (cards.some((c) => isRunning(c.id))) continue;
+    const owner = cards.reduce((a, b) => (b.id < a.id ? b : a));
+    const team = getTeam(owner.team);
+    if (!team) continue;
+    const repo = repoFor(team, team.roles.find((r) => r.id === owner.agent), owner);
+    const host = await providerFor(repo.path);
+    if (!host) continue;
+    const account = { account: team.account, azureConfigDir: team.azureConfigDir };
+    let all: PrFeedback[];
+    try {
+      all = await host.prFeedback(url, repo.path, account);
+    } catch {
+      continue;
+    }
+    const me = (await host.whoami(account))?.toLowerCase() ?? '';
+    const before = state[url];
+    const seen = new Set(before?.seen ?? []);
+    const fresh = all.filter((f) => {
+      if (seen.has(f.id)) return false;
+      // An approval without words asks for nothing.
+      if (!f.body.trim()) return false;
+      if (f.author.toLowerCase() === me) {
+        // The agents write as the same account: first look, and after a wake-up, that is them.
+        if (!before) return false;
+        if (before.wokeAt && f.at >= before.wokeAt) return false;
+      }
+      if (!before && Date.now() - Date.parse(f.at) > BACKFILL_MS) return false;
+      return true;
+    });
+    next[url] = { seen: all.map((f) => f.id), wokeAt: before?.wokeAt };
+    if (!fresh.length) continue;
+    next[url].wokeAt = new Date().toISOString();
+    const who = [...new Set(fresh.map((f) => f.author))].join(', ');
+    bus.emit({
+      type: 'event',
+      event: addEvent(owner.id, 'status', `${who} har granskat PR #${owner.prNumber}: ${fresh.length === 1 ? 'en ny kommentar' : `${fresh.length} nya kommentarer`}. ${nameIn(owner.team, owner.agent)} går igenom dem.`),
+    });
+    void startAgent(
+      owner.id,
+      [
+        `[Kontrollrummet] Ny granskning på din PR #${owner.prNumber} (${url}):`,
+        '',
+        ...fresh.map(feedbackLine),
+        '',
+        `Gå igenom varje punkt i din worktree. Åtgärda det som stämmer, kör testerna och pusha. Stämmer något inte, eller är det redan löst, svara kort i tråden varför (gh pr comment, eller svar på kommentaren med gh api; az devops invoke på Azure DevOps). Granskning från bottar som Copilot kan ha fel: bedöm själv. Är en punkt ett beslut som är ${OWNER}s, rapportera needs-you med frågan och alternativen. Annars avsluta med report pr-open och en kort sammanfattning av vad du ändrade.`,
+      ].join('\n'),
+      { wake: true },
+    ).catch((err: Error) => {
+      bus.emit({ type: 'event', event: addEvent(owner.id, 'error', `Kunde inte väcka för granskningen: ${err.message}`) });
+    });
+  }
+  writeFileSync(FEEDBACK_FILE, JSON.stringify(next));
 }
 
 /**
@@ -224,7 +357,15 @@ async function checkReviewRequests() {
       const key = `${host.id}:${repo.path}`;
       if (key in next) continue;
       try {
-        const prs = await host.reviewRequests(repo.path, { account: team.account, azureConfigDir: team.azureConfigDir }, team.reviewer);
+        // A card's own PR is on the board already, under Att merga.
+        const cards = new Set(
+          listSubtasks()
+            .filter((s) => s.team === team.id && s.prUrl && s.status !== 'done' && s.status !== 'failed')
+            .map((s) => s.prNumber),
+        );
+        const prs = (await host.reviewRequests(repo.path, { account: team.account, azureConfigDir: team.azureConfigDir }, team.reviewer)).filter(
+          (p) => !cards.has(p.number),
+        );
         next[key] = prs.map((p) => p.url);
         for (const p of prs) {
           if (state[key]?.includes(p.url) || seen.has(p.url)) continue;
@@ -241,6 +382,43 @@ async function checkReviewRequests() {
     bus.emit({ type: 'notice', notice });
   }
   writeFileSync(REVIEW_FILE, JSON.stringify(next));
+}
+
+// ---------------------------------------------------------------- the owner's own PRs
+
+/** Per team: the owner's open PRs that no card holds, with who they wait for. */
+const own = new Map<string, (OwnPr & { repo: string })[]>();
+export const ownPrs = () => Object.fromEntries(own);
+
+/**
+ * PRs the owner opened by hand (or a pipeline in their name) belong under Att
+ * merga too. Left out: cards' PRs, and those waiting for the owner's own vote,
+ * which come as a review notice.
+ */
+async function checkOwnPrs() {
+  const asked = new Set(Object.values(reviewState()).flat());
+  for (const team of loadTeams()) {
+    const cards = new Set(listSubtasks().filter((s) => s.team === team.id && s.prUrl).map((s) => s.prNumber));
+    const list: (OwnPr & { repo: string })[] = [];
+    let failed = false;
+    for (const repo of team.repos) {
+      const host = await providerFor(repo.path);
+      if (!host) continue;
+      try {
+        for (const p of await host.ownPrs(repo.path, { account: team.account, azureConfigDir: team.azureConfigDir })) {
+          if (cards.has(p.number) || asked.has(p.url)) continue;
+          list.push({ ...p, repo: repo.id, review: { state: p.review.state, who: p.review.who.map((w) => personFor(team, w)) } });
+        }
+      } catch {
+        failed = true;
+      }
+    }
+    // Offline or signed out: keep what was shown.
+    if (failed && !list.length) continue;
+    const before = JSON.stringify(own.get(team.id) ?? []);
+    own.set(team.id, list);
+    if (JSON.stringify(list) !== before) bus.emit({ type: 'own-prs', team: team.id, prs: list });
+  }
 }
 
 // ---------------------------------------------------------------- standup
@@ -298,7 +476,7 @@ function standup() {
     const lines = active.map((s) => {
       const age = Math.round((now - Date.parse(s.updatedAt)) / 60000);
       const stale = now - Date.parse(s.updatedAt) > STALE_MS ? ' (står still)' : '';
-      return `- #${s.id} ${s.agent} [${s.status}] ${age} min sedan senaste ändring${stale}: ${s.brief.split('\n')[0].slice(0, 100)}`;
+      return `- #${s.id} ${whoIn(s.team, s.agent)} [${s.status}] ${age} min sedan senaste ändring${stale}: ${s.brief.split('\n')[0].slice(0, 100)}`;
     });
     void startAgent(
       card.id,
@@ -306,7 +484,7 @@ function standup() {
         '[Kontrollrummet] Standup. Det här är aktivt:',
         ...lines,
         '',
-        `Kontrollera öppna PR:er (gh pr view på GitHub; az repos pr show och trådarna med az devops invoke --area git --resource pullRequestThreads på Azure DevOps) (${peopleNames(team, OWNER)} mergar mellan varven), skapa kort för review-kommentarer som inte är åtgärdade, och följ upp det som står still. Säg till med notify_user bara om något kräver ${OWNER}, samlat i en notis. Avsluta med report status watching.`,
+        `Kontrollera öppna PR:er (gh pr view på GitHub; az repos pr show på Azure DevOps) (${peopleNames(team, OWNER)} mergar mellan varven). Nya granskningar och kommentarer på korts PR:er skickar kontrollrummet själv till kortets agent; följ bara upp sådana som blivit liggande, och det som står still. Säg till med notify_user bara om något kräver ${OWNER}, samlat i en notis. Avsluta med report status watching.`,
       ].join('\n'),
       { wake: true },
     ).catch(() => undefined);
@@ -402,6 +580,7 @@ export function startWatching(onCardCreated: () => void = () => {}) {
   setInterval(() => void checkPrs(), 3 * 60 * 1000);
   setInterval(standup, 30 * 60 * 1000);
   setInterval(() => void checkReviewRequests(), 10 * 60 * 1000);
+  setInterval(() => void checkOwnPrs(), 3 * 60 * 1000);
   void checkPrs();
-  void checkReviewRequests();
+  void checkReviewRequests().then(checkOwnPrs);
 }

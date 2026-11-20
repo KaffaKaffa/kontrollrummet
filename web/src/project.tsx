@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { post, put, type Board, type InfraItem, type Check, type CheckFor, type Existing, type ExistingSkill, type Library, type Scan, type Suggested, type Team } from './api.ts';
+import { ConsultantsTab } from './consultants.tsx';
+import { DevAppsTab } from './devapps.tsx';
+import { nameOf, post, put, type Board, type InfraItem, type Check, type CheckFor, type Existing, type ExistingSkill, type Library, type Scan, type Suggested, type Team } from './api.ts';
 import { Avatar } from './ui.tsx';
 import { FolderField } from './folders.tsx';
 
@@ -39,7 +41,7 @@ export function Logo({ team, size = 20 }: { team: Pick<Team, 'id' | 'name' | 'ha
   );
 }
 
-function Section({ title, children, note }: { title: string; children: ReactNode; note?: ReactNode }) {
+export function Section({ title, children, note }: { title: string; children: ReactNode; note?: ReactNode }) {
   return (
     <section className="settings-section">
       <h3>{title}</h3>
@@ -49,7 +51,7 @@ function Section({ title, children, note }: { title: string; children: ReactNode
   );
 }
 
-function useAction() {
+export function useAction() {
   const [state, setState] = useState<{ busy: boolean; error: string | null; done: string | null }>({ busy: false, error: null, done: null });
   const run = useCallback(async (fn: () => Promise<unknown>, done?: string) => {
     setState({ busy: true, error: null, done: null });
@@ -625,7 +627,7 @@ function Agents({ team, library }: { team: Team; library: Library | null }) {
           <li key={r.id}>
             <Avatar team={team.id} role={r} size="sm" />
             <a href={`#/${team.id}/office/agent/${r.id}`}>
-              <strong>{r.name}</strong>
+              <strong>{r.nick ? `${r.nick} (${r.name})` : r.name}</strong>
             </a>
             <span className="settings-muted">{r.title}</span>
             <span className="settings-muted num">{r.model}</span>
@@ -634,7 +636,7 @@ function Agents({ team, library }: { team: Team; library: Library | null }) {
               className="btn btn-quiet"
               disabled={act.busy}
               onClick={() => {
-                if (window.confirm(`Ta bort ${r.name} ur teamet? Filen flyttas till roles/.removed/ och anteckningarna finns kvar.`))
+                if (window.confirm(`Ta bort ${nameOf(r)} ur teamet? Filen flyttas till roles/.removed/ och anteckningarna finns kvar.`))
                   void act.run(() => post(`/api/teams/${team.id}/roles/${r.id}/remove`));
               }}
             >
@@ -800,7 +802,7 @@ function McpOverview({ team }: { team: Team }) {
             <li key={s.id}>
               <strong>{s.label}</strong>
               <span className="settings-muted">{s.note || s.source}</span>
-              <span className="settings-muted">{users.length ? users.map((r) => r.name).join(', ') : 'Ingen'}</span>
+              <span className="settings-muted">{users.length ? users.map((r) => nameOf(r)).join(', ') : 'Ingen'}</span>
             </li>
           );
         })}
@@ -811,7 +813,7 @@ function McpOverview({ team }: { team: Team }) {
             <span className="settings-muted">
               {team.roles
                 .filter((r) => r.mcp === 'all')
-                .map((r) => r.name)
+                .map((r) => nameOf(r))
                 .join(', ')}
             </span>
           </li>
@@ -821,7 +823,7 @@ function McpOverview({ team }: { team: Team }) {
   );
 }
 
-const TAB_LABEL = { project: 'Projektet', git: 'Git', infra: 'Infrastruktur', logging: 'Loggning' } as const;
+const TAB_LABEL = { project: 'Projektet', git: 'Git', apps: 'Appar', consultants: 'Konsulter', infra: 'Infrastruktur', logging: 'Loggning' } as const;
 type SettingsTab = keyof typeof TAB_LABEL;
 
 export function ProjectSettings({ board, team, extra }: { board: Board; team: Team; extra?: ReactNode }) {
@@ -853,7 +855,7 @@ export function ProjectSettings({ board, team, extra }: { board: Board; team: Te
         </div>
       </header>
       <div className="segmented settings-tabs" role="tablist" aria-label="Inställningar">
-        {(['project', 'git', 'infra', 'logging'] as const).map((t) => (
+        {(Object.keys(TAB_LABEL) as SettingsTab[]).map((t) => (
           <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => pick(t)}>
             {TAB_LABEL[t]}
           </button>
@@ -880,6 +882,8 @@ export function ProjectSettings({ board, team, extra }: { board: Board; team: Te
           {(team.azure || team.azureConfigDir) && <DevOpsProfile key={`${team.id}-${team.azureConfigDir}`} team={team} />}
         </>
       )}
+      {tab === 'apps' && <DevAppsTab key={team.id} team={team} apps={board.devApps[team.id] ?? []} />}
+      {tab === 'consultants' && <ConsultantsTab key={team.id} team={team} roles={team.roles} />}
       {tab === 'infra' && <InfraTab team={team} />}
       {tab === 'logging' && <LoggingTab team={team} />}
     </div>
