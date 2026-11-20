@@ -1,5 +1,7 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { post, useBoard, type Account, type Board, type Plan, type PlanStatus, type Role, type Subtask, type Team, type Usage } from './api.ts';
+import { ConsultantDesk, ConsultantFaces } from './consultants.tsx';
+import { Component, lazy, Suspense, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { DevAppButtons } from './devapps.tsx';
+import { awaitsReview, calledOr, nameOf, reviewText, post, useBoard, type Account, type Board, type Notice, type OwnPr, type Plan, type PlanStatus, type Role, type Subtask, type Team, type Usage } from './api.ts';
 import { Markdown } from './markdown.tsx';
 import { Linked } from './links.tsx';
 import { AgentSettings, Modal } from './settings.tsx';
@@ -84,12 +86,12 @@ function NewTask({ board }: { board: TeamBoard }) {
 
   const placeholder =
     target === 'bug'
-      ? 'Klistra in fynden, ett per rad. Bug sorterar och delar ut.'
+      ? `Klistra in fynden, ett per rad. ${calledOr(bug, 'Bug')} sorterar och delar ut.`
       : target === 'plan'
-        ? 'Vilken feature ska planeras? Arkitekten läser koden och tar fram en plan du kan genomföra eller parkera.'
+        ? `Vilken feature ska planeras? ${calledOr(architect, 'Arkitekten')} läser koden och tar fram en plan du kan genomföra eller parkera.`
       : target === 'lead'
-        ? 'Vad ska teamet göra? Teamleadern delar upp det.'
-        : `Vad ska ${role?.name ?? 'agenten'} göra?`;
+        ? `Vad ska teamet göra? ${calledOr(lead, 'Teamleadern')} delar upp det.`
+        : `Vad ska ${nameOf(role) ?? 'agenten'} göra?`;
 
   return (
     <section className="hero">
@@ -98,7 +100,7 @@ function NewTask({ board }: { board: TeamBoard }) {
         <div className="segmented" role="tablist" aria-label="Till vem">
           {lead && (
             <button type="button" role="tab" aria-selected={target === 'lead'} onClick={() => setTarget('lead')}>
-              Teamleadern
+              {calledOr(lead, 'Teamleadern')}
             </button>
           )}
           {architect && (
@@ -118,7 +120,7 @@ function NewTask({ board }: { board: TeamBoard }) {
         <Composer
           placeholder={placeholder}
           rows={target === 'bug' ? 6 : 3}
-          submitLabel={target === 'bug' ? 'Lämna till Bug' : target === 'plan' ? 'Börja planera' : 'Skicka'}
+          submitLabel={target === 'bug' ? `Lämna till ${calledOr(bug, 'Bug')}` : target === 'plan' ? 'Börja planera' : 'Skicka'}
           onSubmit={(text) => post('/api/tasks', { text, team: board.team.id, agent: role?.id })}
         >
           {target === 'direct' && (
@@ -127,7 +129,7 @@ function NewTask({ board }: { board: TeamBoard }) {
               <select value={directRole?.id ?? ''} onChange={(e) => setDirect(e.target.value)}>
                 {board.roles.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.name}
+                    {r.nick ? `${r.nick} (${r.name})` : r.name}
                   </option>
                 ))}
               </select>
@@ -164,11 +166,11 @@ function Decision({ card, team, role, owner }: { card: Subtask; team: string; ro
     }
   };
   return (
-    <article className="decision" aria-label={`${role?.name ?? card.agent} #${card.id} kräver beslut`}>
+    <article className="decision" aria-label={`${nameOf(role) ?? card.agent} #${card.id} kräver beslut`}>
       <header className="decision-head">
         <Avatar team={team} role={role} size="sm" status={card.status} />
         <a href={`#/${team}/office/card/${card.id}`}>
-          <strong>{role?.name ?? card.agent}</strong> #{card.id}
+          <strong>{nameOf(role) ?? card.agent}</strong> #{card.id}
         </a>
         <span className="decision-brief">{card.brief.split('\n')[0]}</span>
       </header>
@@ -202,7 +204,7 @@ function Decision({ card, team, role, owner }: { card: Subtask; team: string; ro
           value={own}
           onChange={(e) => setOwn(e.target.value)}
           placeholder={ask?.options?.length ? 'Eller skriv ett eget svar…' : 'Svara…'}
-          aria-label={`Svar till ${role?.name ?? card.agent}`}
+          aria-label={`Svar till ${nameOf(role) ?? card.agent}`}
         />
         <button type="submit" className="btn btn-primary" disabled={busy || !own.trim()}>
           Skicka
@@ -213,14 +215,57 @@ function Decision({ card, team, role, owner }: { card: Subtask; team: string; ro
   );
 }
 
-/** Open PRs: nothing more happens on them until the owner merges. One row per PR. */
-function toMerge(board: TeamBoard): Subtask[] {
+/** Open PRs, one row per PR: nothing more happens on them until someone merges. */
+function openPrs(board: TeamBoard): Subtask[] {
   const seen = new Set<number>();
   return board.subtasks.filter((s) => {
     if (s.team !== board.team.id || s.status !== 'pr-open' || s.prNumber == null || seen.has(s.prNumber)) return false;
     seen.add(s.prNumber);
     return true;
   });
+}
+
+/**
+ * What the owner can do with a notice. Klart: done what it asked, and the agent
+ * that wrote it hears so and goes on. Öppna: the agent's card, to ask or change
+ * course. Stäng: out of the inbox, nobody told.
+ */
+function NoticeActions({ notice, team, card, name }: { notice: Notice; team: string; card?: Subtask; name?: string }) {
+  const [busy, setBusy] = useState(false);
+  const act = (what: 'done' | 'close') => {
+    setBusy(true);
+    void post(`/api/notices/${notice.id}/${what}`).finally(() => setBusy(false));
+  };
+  return (
+    <div className="notice-actions">
+      {card && (
+        <button type="button" className="btn btn-merged" disabled={busy} onClick={() => act('done')} title={`Markera som gjort och säg det till ${name ?? 'agenten'}`}>
+          Klart
+        </button>
+      )}
+      {card && (
+        <a className="btn btn-quiet" href={`#/${team}/office/card/${card.id}`}>
+          Öppna
+        </a>
+      )}
+      <button type="button" className="btn btn-quiet" disabled={busy} onClick={() => act('close')} title="Ta bort ur inkorgen utan att säga något">
+        Stäng
+      </button>
+    </div>
+  );
+}
+
+function PrGlyph() {
+  return (
+    <span className="pr-glyph" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="16" height="16">
+        <circle cx="6" cy="5" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <circle cx="6" cy="19" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <circle cx="18" cy="19" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M6 7.2v9.6M18 16.8V10a4 4 0 0 0-4-4h-3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    </span>
+  );
 }
 
 /** The watch's notice of PRs that wait for the owner's review (server/watch.ts). */
@@ -270,11 +315,11 @@ function ReviewNotice({ board, text }: { board: TeamBoard; text: string }) {
                 <span className="review-action">
                   {card ? (
                     <a href={`#/${board.team.id}/office/card/${card.id}`}>
-                      {card.status === 'done' ? 'Granskad' : card.status === 'needs-you' ? 'Granskad, väntar på dig' : `${lead?.name ?? 'Teamleadern'} granskar`} (#{card.id})
+                      {card.status === 'done' ? 'Granskad' : card.status === 'needs-you' ? 'Granskad, väntar på dig' : `${calledOr(lead, 'Teamleadern')} granskar`} (#{card.id})
                     </a>
                   ) : (
                     <button type="button" className="btn btn-quiet" disabled={busy !== null} onClick={() => void delegate(pr.url, pr.title)}>
-                      {busy === pr.url ? 'Ger den till teamleadern…' : `Låt ${lead?.name ?? 'teamleadern'} granska`}
+                      {busy === pr.url ? `Ger den till ${calledOr(lead, 'teamleadern')}…` : `Låt ${calledOr(lead, 'teamleadern')} granska`}
                     </button>
                   )}
                 </span>
@@ -292,10 +337,39 @@ function Inbox({ board }: { board: TeamBoard }) {
   const roles = new Map(board.roles.map((r) => [r.id, r]));
   const cards = new Map(board.subtasks.map((s) => [s.id, s]));
   const approvals = board.approvals.filter((a) => a.team === board.team.id);
-  const notices = board.notices.filter((n) => n.team === board.team.id).slice(0, 12);
+  const notices = board.notices.filter((n) => n.team === board.team.id && !n.closedAt).slice(0, 12);
   const waiting = board.subtasks.filter((s) => s.status === 'needs-you');
-  const merges = toMerge(board);
-  if (!approvals.length && !notices.length && !waiting.length && !merges.length) return null;
+  const prs = openPrs(board);
+  // A PR waiting for someone else's approval is not the owner's to merge yet.
+  const merges = prs.filter((s) => !awaitsReview(s));
+  const reviewing = prs.filter(awaitsReview);
+  // The owner's own PRs that no card holds: the same, without a card to link.
+  const mine = board.ownPrs[board.team.id] ?? [];
+  const blocked = (p: OwnPr) => p.review.state === 'waiting' || p.review.state === 'changes';
+  const many = board.team.repos.length > 1;
+  const ownRow = (p: OwnPr, waits: boolean) => (
+    <div key={`own-${p.url}`} className={`inbox-item inbox-merge ${waits ? 'inbox-reviewing' : ''}`}>
+      {!waits && <PrGlyph />}
+      <span className="inbox-merge-main">
+        <span>
+          <a href={p.url} target="_blank" rel="noreferrer">
+            {waits ? `PR #${p.number}` : <strong>Merga PR #{p.number}</strong>}
+          </a>{' '}
+          · din{many ? ` i ${p.repo}` : ''}
+          {waits && (
+            <>
+              {' · '}
+              <span title={reviewText(p)}>{reviewText(p, { short: true })}</span>
+            </>
+          )}
+        </span>
+        <span className="inbox-text">{p.title.slice(0, 140)}</span>
+      </span>
+    </div>
+  );
+  const myMerges = mine.filter((p) => !blocked(p));
+  const myWaits = mine.filter(blocked);
+  if (!approvals.length && !notices.length && !waiting.length && !prs.length && !mine.length) return null;
   return (
     <section className="inbox" aria-label="Inkorgen">
       <h2 className="section-title">Inkorgen</h2>
@@ -306,41 +380,57 @@ function Inbox({ board }: { board: TeamBoard }) {
       {waiting.map((s) => (
         <Decision key={s.id} card={s} team={board.team.id} role={roles.get(s.agent)} owner={board.owner} />
       ))}
-      {merges.length > 0 && <p className="inbox-sub">Att merga</p>}
+      {merges.length + myMerges.length > 0 && <p className="inbox-sub">Att merga</p>}
       {merges.map((s) => (
         <div key={s.id} className="inbox-item inbox-merge">
-          <span className="pr-glyph" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="16" height="16">
-              <circle cx="6" cy="5" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
-              <circle cx="6" cy="19" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
-              <circle cx="18" cy="19" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
-              <path d="M6 7.2v9.6M18 16.8V10a4 4 0 0 0-4-4h-3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </span>
+          <PrGlyph />
           <span className="inbox-merge-main">
             <span>
               <a href={s.prUrl ?? `#/${board.team.id}/office/card/${s.id}`} target="_blank" rel="noreferrer">
                 <strong>Merga PR #{s.prNumber}</strong>
               </a>{' '}
-              · <a href={`#/${board.team.id}/office/card/${s.id}`}>{roles.get(s.agent)?.name ?? s.agent} #{s.id}</a>
+              · <a href={`#/${board.team.id}/office/card/${s.id}`}>{nameOf(roles.get(s.agent)) ?? s.agent} #{s.id}</a>
             </span>
             <span className="inbox-text">{s.brief.split('\n')[0].slice(0, 140)}</span>
             <MergedButton subtask={s} compact />
           </span>
         </div>
       ))}
-      {notices.map((n) =>
-        REVIEW_NOTICE.test(n.text) ? (
-          <ReviewNotice key={n.id} board={board} text={n.text} />
-        ) : (
-          <div key={n.id} className="notice">
-            <Avatar team={board.team.id} role={board.roles.find((r) => r.kind === 'lead')} size="sm" />
-            <p>
-              <Linked text={n.text} />
-            </p>
+      {myMerges.map((p) => ownRow(p, false))}
+      {reviewing.length + myWaits.length > 0 && <p className="inbox-sub">Väntar på granskning</p>}
+      {myWaits.map((p) => ownRow(p, true))}
+      {reviewing.map((s) => (
+        <div key={s.id} className="inbox-item inbox-merge inbox-reviewing">
+          <span className="inbox-merge-main">
+            <span>
+              <a href={s.prUrl ?? `#/${board.team.id}/office/card/${s.id}`} target="_blank" rel="noreferrer">
+                PR #{s.prNumber}
+              </a>{' '}
+              · <a href={`#/${board.team.id}/office/card/${s.id}`}>{nameOf(roles.get(s.agent)) ?? s.agent} #{s.id}</a> · <span title={reviewText(s)}>{reviewText(s, { short: true })}</span>
+            </span>
+            <span className="inbox-text">{s.brief.split('\n')[0].slice(0, 140)}</span>
+          </span>
+        </div>
+      ))}
+      {notices.map((n) => {
+        const from = n.subtaskId != null ? cards.get(n.subtaskId) : undefined;
+        const role = from ? roles.get(from.agent) : board.roles.find((r) => r.kind === 'lead');
+        return (
+          <div key={n.id} className="notice-wrap">
+            {REVIEW_NOTICE.test(n.text) ? (
+              <ReviewNotice board={board} text={n.text} />
+            ) : (
+              <div className="notice">
+                <Avatar team={board.team.id} role={role} size="sm" />
+                <p>
+                  <Linked text={n.text} />
+                </p>
+              </div>
+            )}
+            <NoticeActions notice={n} team={board.team.id} card={from} name={nameOf(role)} />
           </div>
-        ),
-      )}
+        );
+      })}
     </section>
   );
 }
@@ -406,7 +496,7 @@ function BoardColumn({ board, openId }: { board: TeamBoard; openId: number | nul
       {tasks.length === 0 && (
         <div className="empty-state">
           <p className="empty-title">Kontoret är tyst.</p>
-          <p>Ge teamleadern något att göra, eller klistra in en fyndlista till Bug.</p>
+          <p>Ge {calledOr(board.roles.find((r) => r.kind === 'lead'), 'teamleadern')} något att göra, eller klistra in en fyndlista till {calledOr(board.roles.find((r) => r.kind === 'bug'), 'Bug')}.</p>
         </div>
       )}
       {active.length > 0 && <h2 className="section-title">Pågår</h2>}
@@ -446,6 +536,96 @@ function CardDrawer({ board, id, loadEvents }: { board: TeamBoard; id: number; l
   );
 }
 
+/**
+ * A view that throws must not blank the whole page: the top bar stays, the
+ * error is shown, and the other views still work. Most often the page is newer
+ * than a server that has not restarted yet.
+ */
+class ViewBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="empty-state view-error">
+        <p className="empty-title">Den här vyn kunde inte visas.</p>
+        <p>Oftast är webben nyare än servern: den startar om när agenterna är klara, och sidan laddar om sig själv då. De andra vyerna fungerar under tiden.</p>
+        <p className="mono settings-muted">{this.state.error.message}</p>
+        <button type="button" className="btn" onClick={() => location.reload()}>
+          Ladda om
+        </button>
+      </div>
+    );
+  }
+}
+
+const BOARD_WIDTH_KEY = 'board-width';
+
+/** The left panel's width in px, dragged by the owner and remembered in this browser; null: the default. */
+function useBoardWidth(): [number | null, (w: number | null) => void] {
+  const [width, setWidth] = useState<number | null>(() => {
+    try {
+      const v = Number(localStorage.getItem(BOARD_WIDTH_KEY));
+      return v > 0 ? v : null;
+    } catch {
+      return null;
+    }
+  });
+  const set = (w: number | null) => {
+    setWidth(w);
+    try {
+      if (w == null) localStorage.removeItem(BOARD_WIDTH_KEY);
+      else localStorage.setItem(BOARD_WIDTH_KEY, String(Math.round(w)));
+    } catch {
+      // Not remembered in a private window.
+    }
+  };
+  return [width, set];
+}
+
+/**
+ * The handle on the left panel's edge: drag to make it wider or narrower, never
+ * narrower than it is by default; a double click goes back to the default.
+ */
+function BoardResizer({ width, onWidth }: { width: number | null; onWidth: (w: number | null) => void }) {
+  const [dragging, setDragging] = useState(false);
+  const start = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const column = document.querySelector<HTMLElement>('.board-column');
+    if (!column) return;
+    e.preventDefault();
+    const min = parseFloat(getComputedStyle(column).minWidth) || column.getBoundingClientRect().width;
+    const max = Math.max(min, window.innerWidth * 0.6);
+    const left = column.getBoundingClientRect().left;
+    setDragging(true);
+    const move = (ev: PointerEvent) => onWidth(Math.min(max, Math.max(min, ev.clientX - left)));
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div
+      className={`board-resizer ${dragging ? 'is-dragging' : ''}`}
+      style={{ left: width ? `${width}px` : undefined }}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Ändra panelens bredd"
+      title="Dra för att ändra bredden, dubbelklicka för standard"
+      onPointerDown={start}
+      onDoubleClick={() => onWidth(null)}
+    >
+      <span className="board-resizer-grip" aria-hidden="true">
+        ‹›
+      </span>
+    </div>
+  );
+}
+
 /** What an agent does when nobody needs it. Office life. */
 const IDLE = [
   'Fikar.',
@@ -477,7 +657,17 @@ function Desk({ role, board, index, loadEvents, life }: { role: Role; board: Tea
     mine.find((s) => s.status === 'watching' && board.tasks.find((t) => t.id === s.taskId)?.title !== 'Boarden');
   const queue = mine.filter((s) => s.status === 'queued');
   const done = mine.filter((s) => s.status === 'done').length;
-  const locks = Object.entries(board.locks).filter(([, id]) => mine.some((s) => s.id === id));
+  const isMine = (id: number) => mine.some((s) => s.id === id);
+  const label = (r: string) => r.replace(/^[\w-]+:/, '');
+  const locks = [
+    ...Object.entries(board.locks)
+      .filter(([, id]) => isMine(id))
+      .map(([r]) => ({ r, text: label(r), title: 'Låst åt agenten' })),
+    ...Object.entries(board.lockQueues ?? {}).flatMap(([r, q]) => [
+      ...(q.sharing.some(isMine) ? [{ r, text: `${label(r)} (delar)`, title: `Delar instansen med kort #${board.locks[r]}` }] : []),
+      ...(q.waiting.some(isMine) ? [{ r, text: `väntar på ${label(r)}`, title: `Används av kort #${board.locks[r]}` }] : []),
+    ]),
+  ];
   const events = current ? (board.events[current.id] ?? []) : [];
   const lastSaid = [...events].reverse().find((e) => e.kind === 'text' || e.kind === 'tool');
 
@@ -487,12 +677,12 @@ function Desk({ role, board, index, loadEvents, life }: { role: Role; board: Tea
   }, [current?.id, board.generation]);
 
   return (
-    <section className={`desk ${current ? `desk-${current.status}` : 'desk-idle'}`} aria-label={role.name}>
-      <a className="desk-top" href={`#/${board.team.id}/office/agent/${role.id}`} title={`Inställningar för ${role.name}`}>
+    <section className={`desk ${current ? `desk-${current.status}` : 'desk-idle'}`} aria-label={nameOf(role)}>
+      <a className="desk-top" href={`#/${board.team.id}/office/agent/${role.id}`} title={`Inställningar för ${nameOf(role)}`}>
         <Avatar team={board.team.id} role={role} size="xl" status={current?.status} />
         <div className="desk-who">
-          <h2>{role.name}</h2>
-          <p className="desk-title">{role.title}</p>
+          <h2>{nameOf(role)}</h2>
+          <p className="desk-title">{role.nick ? `${role.name} · ${role.title}` : role.title}</p>
           <p className="desk-model">
             {role.model}
             {role.wakeModel ? ` · ${role.wakeModel} vid uppföljning` : ''}
@@ -519,9 +709,9 @@ function Desk({ role, board, index, loadEvents, life }: { role: Role; board: Tea
         )}
         {queue.length > 0 && <span className="desk-stat num">{queue.length} i kö</span>}
         {done > 0 && <span className="desk-stat num">{done} klara</span>}
-        {locks.map(([r]) => (
-          <span key={r} className="chip">
-            {r}
+        {locks.map((l) => (
+          <span key={`${l.r}-${l.text}`} className="chip" title={l.title}>
+            {l.text}
           </span>
         ))}
       </footer>
@@ -538,7 +728,6 @@ function Desk({ role, board, index, loadEvents, life }: { role: Role; board: Tea
 /** A duty with no running card on the desk, as a badge. */
 const DUTY_BADGE: Partial<Record<Duty, string>> = {
   queue: 'I kö',
-  pr: 'Väntar på granskning',
   sleep: 'Kvoten slut',
   despair: 'Misslyckades',
 };
@@ -594,12 +783,16 @@ function Office({
   const agent = agentId ? board.roles.find((r) => r.id === agentId) : undefined;
   const [mode, setMode] = useOfficeMode();
   const approvals = useMemo(() => board.approvals.filter((a) => a.team === board.team.id), [board.approvals, board.team.id]);
+  const [boardWidth, setBoardWidth] = useBoardWidth();
   // The office goes on in either view: the desks say what the people in 3D are doing.
   const life = useOfficeLife(board.team.id, board.roles, board.subtasks, board.tasks, approvals);
   return (
-    <div className="office-layout">
+    <div className="office-layout" style={{ '--board-width': boardWidth ? `${boardWidth}px` : undefined } as CSSProperties}>
       <BoardColumn board={board} openId={cardId} />
+      <BoardResizer width={boardWidth} onWidth={setBoardWidth} />
       <div className="office-main">
+        <div className="office-bar">
+          {mode === '3d' ? <ConsultantFaces list={board.consultants[board.team.id] ?? []} team={board.team.id} /> : <span />}
         <div className="segmented office-mode" role="tablist" aria-label="Visa kontoret som">
           <button type="button" role="tab" aria-selected={mode === 'desks'} onClick={() => setMode('desks')}>
             Skrivbord
@@ -607,6 +800,7 @@ function Office({
           <button type="button" role="tab" aria-selected={mode === '3d'} onClick={() => setMode('3d')}>
             Kontoret 3D
           </button>
+        </div>
         </div>
         {mode === '3d' ? (
           <Suspense fallback={<p className="empty">Bygger kontoret…</p>}>
@@ -625,6 +819,9 @@ function Office({
           <div className="office">
             {roles.map((r, i) => (
               <Desk key={r.id} role={r} board={board} index={i} loadEvents={loadEvents} life={life} />
+            ))}
+            {(board.consultants[board.team.id] ?? []).map((c) => (
+              <ConsultantDesk key={`c-${c.id}`} c={c} team={board.team.id} roles={board.roles} />
             ))}
           </div>
         )}
@@ -704,7 +901,7 @@ function Plans({ board, openId }: { board: TeamBoard; openId: number | null }) {
       <div className="empty-state plans-empty">
         <Avatar team={board.team.id} role={architect} size="xl" />
         <p className="empty-title">Inga planer än.</p>
-        <p>Välj Planera på boarden och beskriv featuren. Arkitekten ritar, du bestämmer.</p>
+        <p>Välj Planera på boarden och beskriv featuren. {calledOr(architect, 'Arkitekten')} ritar, du bestämmer.</p>
       </div>
     );
 
@@ -714,7 +911,7 @@ function Plans({ board, openId }: { board: TeamBoard; openId: number | null }) {
         {drafting.map((s) => (
           <a key={`d${s.id}`} className="plan-item" href={`#/${board.team.id}/office/card/${s.id}`}>
             <span className="plan-item-title">{s.brief.split('\n')[0]}</span>
-            <span className="badge badge-running">Arkitekten ritar</span>
+            <span className="badge badge-running">{calledOr(architect, 'Arkitekten')} ritar</span>
           </a>
         ))}
         {plans.map((p) => (
@@ -744,7 +941,7 @@ function Plans({ board, openId }: { board: TeamBoard; openId: number | null }) {
           <PlanActions plan={open} />
           <Markdown source={open.body} />
           <footer className="plan-foot">
-            {card && <a href={`#/${board.team.id}/office/card/${card.id}`}>Prata med arkitekten om planen (kort #{card.id})</a>}
+            {card && <a href={`#/${board.team.id}/office/card/${card.id}`}>Prata med {calledOr(architect, 'arkitekten')} om planen (kort #{card.id})</a>}
             {open.taskId != null && (
               <span>
                 Genomförs som uppgift {open.taskId}.{' '}
@@ -833,7 +1030,7 @@ function UsageMeter({ usage, account }: { usage: Usage | null; account?: Account
 }
 
 export function App() {
-  const { board, loadEvents, loadConvEvents } = useBoard();
+  const { board, loadEvents, loadConvEvents, watchDevLog } = useBoard();
   const route = useRoute();
   const { view } = route;
   const team = board.teams.find((t) => t.id === route.team) ?? board.teams[0];
@@ -853,8 +1050,12 @@ export function App() {
   const attention = (id?: string) =>
     board.subtasks.filter((s) => (!id || s.team === id) && s.status === 'needs-you').length +
     board.approvals.filter((a) => !id || a.team === id).length +
-    // Each open PR once, however many cards share it.
-    new Set(board.subtasks.filter((s) => (!id || s.team === id) && s.status === 'pr-open' && s.prNumber != null).map((s) => `${s.team}#${s.prNumber}`)).size;
+    // Each open PR once, however many cards share it; one waiting for someone else's approval is not yet.
+    new Set(board.subtasks.filter((s) => (!id || s.team === id) && s.status === 'pr-open' && !awaitsReview(s) && s.prNumber != null).map((s) => `${s.team}#${s.prNumber}`)).size +
+    Object.entries(board.ownPrs)
+      .filter(([t]) => !id || t === id)
+      .flatMap(([, list]) => list)
+      .filter((p) => p.review.state !== 'waiting' && p.review.state !== 'changes').length;
 
   const total = attention();
   // Done, needs you, an approval: a system notification when the window is not in front.
@@ -916,6 +1117,7 @@ export function App() {
             </a>
           </nav>
         )}
+        {team && view !== 'gudfadern' && view !== 'new' && <DevAppButtons board={board} team={team} watchDevLog={watchDevLog} />}
         <nav aria-label="Gudfadern" className="tabs">
           <a href="#/gudfadern" aria-current={view === 'gudfadern' ? 'page' : undefined}>
             Gudfadern
@@ -926,7 +1128,7 @@ export function App() {
         <p className="topbar-status">
           {board.restartPending ? (
             <span className="restart-note">
-              Startar om för att ta ändringar i bruk{board.restartWaitingFor ? `, väntar på ${board.restartWaitingFor} agent${board.restartWaitingFor > 1 ? 'er' : ''}` : ''}…
+              Startar om för att ta ändringar i bruk{board.restartWaitingFor ? `, väntar på ${board.restartWaitingFor} ${board.restartWaitingFor > 1 ? 'agenter och byggen' : 'agent eller bygge'}` : ''}…
             </span>
           ) : board.connected && paused && Date.parse(paused) > Date.now() ? (
             <span className="paused">
@@ -961,6 +1163,7 @@ export function App() {
         <ThemeToggle />
       </header>
       <main>
+        <ViewBoundary key={`${view}-${team?.id ?? ''}`}>
         {view === 'new' ? (
           <NewProjectGuide board={board} />
         ) : view === 'gudfadern' ? (
@@ -978,6 +1181,7 @@ export function App() {
         ) : (
           <Office board={teamBoard} loadEvents={loadEvents} cardId={route.cardId} agentId={route.agentId} />
         )}
+        </ViewBoundary>
       </main>
     </div>
   );

@@ -5,6 +5,7 @@ import { OWNER, OWNERS } from './owner.ts';
 import {
   addEvent,
   addNotice,
+  setTaskTitle,
   createSubtask,
   savePlan,
   getSubtask,
@@ -17,8 +18,11 @@ import {
   type SubtaskStatus,
 } from './db.ts';
 import { attachImage, generateImage, IMAGE_MODEL, imagesAvailable } from './images.ts';
+import { API_PROVIDERS, consult, consultantWho, findConsultant, loadConsultants, PROVIDER_LABEL, type ApiProvider } from './consultants.ts';
 import { askPeer, replyPeer } from './handoff.ts';
-import { appendNote, getTeam, repoFor, type Role, type RoleKind, type Team } from './roles.ts';
+import { freePort } from './strays.ts';
+import { doneWithApp, onTellCard, useApp } from './devapps.ts';
+import { appendNote, findRole, getTeam, repoFor, who, whoIn, type Role, type RoleKind, type Team } from './roles.ts';
 import { sleepVm, vmFor, wakeVm } from './vms.ts';
 import { suggestInfra } from './infra.ts';
 
@@ -66,8 +70,75 @@ const locks = new Map<string, number>();
 /** VMs a card woke: they go back to sleep when the card lets go. */
 const wokenVms = new Map<string, { teamId: string; subtaskId: number }>();
 
+/** Cards on the same thing as the holder (the same PR), sharing what it runs. */
+const sharers = new Map<string, Set<number>>();
+/** What the holder uses it for: a branch or a PR. */
+const using = new Map<string, string>();
+/** Cards waiting their turn, first first, with what they will use it for. */
+const queues = new Map<string, { id: number; what: string }[]>();
+/** Holders told someone waits: `${resource}|${holder}|${waiter}`. */
+const told = new Set<string>();
+
+const sameUse = (a: string, b: string) => Boolean(a && b) && a.trim().toLowerCase() === b.trim().toLowerCase();
+
+interface Shared {
+  key: string;
+  label: string;
+  ports: number[];
+}
+
+/** A resource by the name an agent gives: the machine-wide ones, the team's VMs, or the team's own. */
+function resourceOf(team: Team, id: string): Shared | null {
+  if ((RESOURCES as readonly string[]).includes(id) || vmFor(team, id)) return { key: id, label: id, ports: id === 'metro-8081' ? [8081] : [] };
+  const own = team.resources[id];
+  return own ? { key: `${team.id}:${id}`, label: own.label, ports: own.ports } : null;
+}
+
+/** Lets go of a resource; the next in line gets it, its ports freed, and is woken. */
+async function letGo(key: string, id: number) {
+  sharers.get(key)?.delete(id);
+  if (locks.get(key) !== id) return;
+  locks.delete(key);
+  const others = [...(sharers.get(key) ?? [])];
+  if (others.length) {
+    // Someone still uses the same instance: it carries on as the holder.
+    locks.set(key, others[0]);
+    sharers.get(key)!.delete(others[0]);
+    return;
+  }
+  using.delete(key);
+  const queue = (queues.get(key) ?? []).filter((w) => {
+    const s = getSubtask(w.id);
+    return s && s.status !== 'done' && s.status !== 'failed';
+  });
+  const next = queue.shift();
+  if (!next) {
+    queues.delete(key);
+    return;
+  }
+  locks.set(key, next.id);
+  using.set(key, next.what);
+  // The rest waiting for the same thing share it.
+  const along = queue.filter((w) => sameUse(w.what, next.what));
+  sharers.set(key, new Set(along.map((w) => w.id)));
+  queues.set(key, queue.filter((w) => !along.includes(w)));
+  const card = getSubtask(next.id)!;
+  const team = getTeam(card.team);
+  const shared = team && resourceOf(team, key.includes(':') ? key.split(':')[1] : key);
+  const freed = shared?.ports.length ? (await Promise.all(shared.ports.map((p) => freePort(p, card)))).join(' ') : '';
+  const label = shared?.label ?? key;
+  for (const w of [next, ...along]) {
+    addEvent(w.id, 'system', `${label} är ledig från kort #${id}.`);
+    void messageCard(
+      w.id,
+      `${label} är din nu: kort #${id} är klart med den.${freed ? ` ${freed}` : ''}${w !== next ? ` Kort #${next.id} kör samma sak (${next.what}); använd dess instans.` : ''} Fortsätt testet.`,
+    );
+  }
+}
+
 export function releaseLocks(subtaskId: number) {
-  for (const [resource, holder] of locks) if (holder === subtaskId) locks.delete(resource);
+  for (const [resource, holder] of [...locks]) if (holder === subtaskId) void letGo(resource, subtaskId).catch(() => undefined);
+  for (const [resource, set] of sharers) if (set.has(subtaskId)) void letGo(resource, subtaskId).catch(() => undefined);
   for (const [resource, w] of wokenVms) {
     if (w.subtaskId !== subtaskId) continue;
     wokenVms.delete(resource);
@@ -78,6 +149,25 @@ export function releaseLocks(subtaskId: number) {
 }
 
 export const lockHolders = () => Object.fromEntries(locks);
+
+/** Who shares and who waits, per resource, for the board. */
+export const lockQueues = () =>
+  Object.fromEntries([...new Set([...queues.keys(), ...sharers.keys()])].map((k) => [k, { sharing: [...(sharers.get(k) ?? [])], waiting: (queues.get(k) ?? []).map((w) => w.id) }]));
+
+/** A line for a holder's tool results while others wait: once per waiter. */
+function waitingNote(cardId: number): string {
+  const notes: string[] = [];
+  for (const [key, holder] of locks) {
+    if (holder !== cardId) continue;
+    for (const w of queues.get(key) ?? []) {
+      const mark = `${key}|${cardId}|${w.id}`;
+      if (told.has(mark)) continue;
+      told.add(mark);
+      notes.push(`Kort #${w.id} väntar på ${key}${w.what ? ` för ${w.what}` : ''}. Bli klar med det du gör där, stoppa dina servrar och släpp den med release_resource.`);
+    }
+  }
+  return notes.join('\n');
+}
 
 /** A deploy job takes a resource too, so no card grabs the VM mid-build. Holder -1 is "a deploy". */
 export function lockForDeploy(resource: string): number | null {
@@ -146,6 +236,9 @@ export function requestApproval(
   return { approval, answer };
 }
 
+/** Card and consultant pairs the owner has said yes to, for consent once per card. */
+const consented = new Set<string>();
+
 // ---------------------------------------------------------------- tools
 
 interface Ctx {
@@ -172,6 +265,7 @@ let messageCard: (id: number, text: string) => Promise<void> = async () => {};
 /** How a lead's reply reaches another card's agent; set by the server, which owns the agents. */
 export function onMessageCard(listener: (id: number, text: string) => Promise<void>) {
   messageCard = listener;
+  onTellCard(listener);
 }
 
 
@@ -180,7 +274,7 @@ function emitSubtask(s: Subtask) {
 }
 
 function roster(team: Team): string {
-  return team.roles.map((r) => `${r.id} (${r.name}: ${r.title})`).join('; ');
+  return team.roles.map((r) => `${r.id} (${who(r)}: ${r.title})`).join('; ');
 }
 
 function sameTeamCard(id: unknown, ctx: Ctx): Subtask {
@@ -189,14 +283,15 @@ function sameTeamCard(id: unknown, ctx: Ctx): Subtask {
   return s;
 }
 
-function newCard(ctx: Ctx, agent: string, brief: string, dependsOn: number[], parentId: number | null, repo?: string | null): Subtask {
-  if (!ctx.team.roles.some((r) => r.id === agent)) throw new Error(`okänd agent "${agent}". Teamet: ${roster(ctx.team)}`);
+function newCard(ctx: Ctx, ref: string, brief: string, dependsOn: number[], parentId: number | null, repo?: string | null): Subtask {
+  const agent = findRole(ctx.team, ref)?.id;
+  if (!agent) throw new Error(`okänd agent "${ref}". Teamet: ${roster(ctx.team)}`);
   for (const d of dependsOn) sameTeamCard(d, ctx);
   // Several repos: a card may name the one it is about; the agent's own is the default.
   if (repo && !ctx.team.repos.some((r) => r.id === repo)) throw new Error(`okänt repo "${repo}". Teamets repon: ${ctx.team.repos.map((r) => r.id).join(', ')}`);
   const s = createSubtask({ id: ctx.subtask.taskId, team: ctx.team.id }, agent, brief, { dependsOn, parentId, repo: repo || null });
   emitSubtask(s);
-  addEvent(s.id, 'system', `Skapat av ${ctx.role.name} (kort ${ctx.subtask.id}).`);
+  addEvent(s.id, 'system', `Skapat av ${who(ctx.role)} (kort ${ctx.subtask.id}).`);
   onBoardChange();
   return s;
 }
@@ -208,7 +303,7 @@ function leadOf(taskId: number, team: Team): Subtask | undefined {
 }
 
 function describe(s: Subtask): string {
-  const parts = [`#${s.id} ${s.agent} [${s.status}]`, s.brief.split('\n')[0].slice(0, 140)];
+  const parts = [`#${s.id} ${whoIn(s.team, s.agent)} [${s.status}]`, s.brief.split('\n')[0].slice(0, 140)];
   if (s.dependsOn.length) parts.push(`väntar på ${s.dependsOn.map((d) => `#${d}`).join(', ')}`);
   if (s.prUrl) parts.push(s.prUrl);
   if (s.note) parts.push(`notis: ${s.note.slice(0, 200)}`);
@@ -286,7 +381,7 @@ const TOOLS: Tool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        agent: { type: 'string', description: 'Roll-id, t.ex. backend, ios, android, web, mac, windows, designer, tester.' },
+        agent: { type: 'string', description: 'Agentens roll-id (backend, ios, web, designer, tester …) eller namn.' },
         brief: { type: 'string' },
         depends_on: { type: 'array', items: { type: 'number' } },
         repo: { type: 'string', description: 'Bara när teamet har flera repon och kortet gäller ett annat än agentens eget: repots id.' },
@@ -297,7 +392,7 @@ const TOOLS: Tool[] = [
       // A tester is done when it reports; what it found belongs to the task's lead.
       const parent = ctx.role.kind === 'tester' ? (leadOf(ctx.subtask.taskId, ctx.team)?.id ?? ctx.subtask.id) : ctx.subtask.id;
       const s = newCard(ctx, String(a.agent), String(a.brief), (a.depends_on ?? []).map(Number), parent, a.repo ? String(a.repo) : null);
-      return `Kort #${s.id} skapat åt ${s.agent}${s.dependsOn.length ? `, väntar på ${s.dependsOn.join(', ')}` : ''}.`;
+      return `Kort #${s.id} skapat åt ${whoIn(s.team, s.agent)}${s.dependsOn.length ? `, väntar på ${s.dependsOn.join(', ')}` : ''}.`;
     },
   },
   {
@@ -308,7 +403,7 @@ const TOOLS: Tool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        agent: { type: 'string' },
+        agent: { type: 'string', description: 'Roll-id eller namn.' },
         brief: { type: 'string', description: 'Vad som behövs och varför, så att agenten klarar sig utan dig.' },
         wait: { type: 'boolean', description: 'true: du väntar på svaret (t.ex. en design att bygga efter). Du blir förälder och väcks när kortet är klart; rapportera watching.' },
         repo: { type: 'string', description: 'Bara när teamet har flera repon och det gäller ett annat än agentens eget: repots id.' },
@@ -318,8 +413,8 @@ const TOOLS: Tool[] = [
     run: (a, ctx) => {
       const lead = leadOf(ctx.subtask.taskId, ctx.team);
       const s = newCard(ctx, String(a.agent), String(a.brief), [], a.wait ? ctx.subtask.id : (lead?.id ?? ctx.subtask.id), a.repo ? String(a.repo) : null);
-      if (a.wait) return `Kort #${s.id} skapat åt ${s.agent}. Rapportera watching nu; du väcks när det är klart.`;
-      return `Kort #${s.id} skapat åt ${s.agent}.${lead ? ` Teamleadern (kort ${lead.id}) följer det.` : ''}`;
+      if (a.wait) return `Kort #${s.id} skapat åt ${whoIn(s.team, s.agent)}. Rapportera watching nu; du väcks när det är klart.`;
+      return `Kort #${s.id} skapat åt ${whoIn(s.team, s.agent)}.${lead ? ` ${whoIn(lead.team, lead.agent)} (kort ${lead.id}) följer det.` : ''}`;
     },
   },
   {
@@ -334,7 +429,7 @@ const TOOLS: Tool[] = [
     run: (a, ctx) => {
       const tester = ctx.team.roles.find((r) => r.kind === 'tester');
       if (!tester) throw new Error('teamet har ingen testare');
-      const brief = `Verifiera kort #${ctx.subtask.id} (${ctx.role.name})${a.pr_url ? ` – ${a.pr_url}` : ''}.\n\n${a.what}`;
+      const brief = `Verifiera kort #${ctx.subtask.id} (${who(ctx.role)})${a.pr_url ? ` – ${a.pr_url}` : ''}.\n\n${a.what}`;
       // The tester checks out the PR in the repo it was made in.
       const s = newCard(ctx, tester.id, brief, [], ctx.subtask.id, ctx.team.repos.length > 1 ? repoFor(ctx.team, ctx.role, ctx.subtask).id : null);
       return `Testkort #${s.id} skapat. Du får svaret som ett meddelande.`;
@@ -405,7 +500,7 @@ const TOOLS: Tool[] = [
       type: 'object',
       properties: {
         id: { type: 'number' },
-        reassign: { type: 'string' },
+        reassign: { type: 'string', description: 'Roll-id eller namn.' },
         depends_on: { type: 'array', items: { type: 'number' } },
         note: { type: 'string' },
         status: { type: 'string', enum: ['queued', 'done', 'failed'] },
@@ -418,15 +513,16 @@ const TOOLS: Tool[] = [
       if (a.note) changes.note = String(a.note);
       if (s.status !== 'running') {
         if (a.reassign) {
-          if (!ctx.team.roles.some((r) => r.id === a.reassign)) throw new Error(`okänd agent ${a.reassign}`);
-          Object.assign(changes, { agent: String(a.reassign), sessionId: null, worktree: null, branch: null });
+          const to = findRole(ctx.team, a.reassign);
+          if (!to) throw new Error(`okänd agent ${a.reassign}. Teamet: ${roster(ctx.team)}`);
+          Object.assign(changes, { agent: to.id, sessionId: null, worktree: null, branch: null });
         }
         if (a.depends_on) changes.dependsOn = a.depends_on.map(Number);
         if (a.status) changes.status = a.status as SubtaskStatus;
       }
       const updated = updateSubtask(s.id, changes);
       emitSubtask(updated);
-      addEvent(s.id, 'system', `Ändrat av ${ctx.role.name}: ${JSON.stringify(a)}`);
+      addEvent(s.id, 'system', `Ändrat av ${who(ctx.role)}: ${JSON.stringify(a)}`);
       onBoardChange();
       return describe(updated);
     },
@@ -460,8 +556,22 @@ const TOOLS: Tool[] = [
     run: async (a, ctx) => {
       const s = sameTeamCard(a.id, ctx);
       if (s.id === ctx.subtask.id) throw new Error('du kan inte svara dig själv');
-      await messageCard(s.id, `[${ctx.role.name}, kort ${ctx.subtask.id}] ${a.text}`);
+      await messageCard(s.id, `[${who(ctx.role)}, kort ${ctx.subtask.id}] ${a.text}`);
       return `Skickat till kort #${s.id}.`;
+    },
+  },
+  {
+    name: 'set_task_title',
+    kinds: 'all',
+    description:
+      'Ge uppgiften en bättre titel på boarden när du vet mer än det första som skrevs. Handlar den om ett ärende med nummer (user story, bugg, issue, PR): ärendets egen titel med numret först, t.ex. "US 2491: Radera inaktiva användare" eller "BUG 1403: Bilagor saknas i frågor". Annars en kort sammanfattning, högst ett par rader. Bara kortet överst i uppgiften (utan förälder) byter titel.',
+    inputSchema: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'] },
+    run: (a, ctx) => {
+      if (ctx.subtask.parentId != null) throw new Error('bara kortet överst i uppgiften byter titel; säg till det kortet i din rapport');
+      const title = String(a.title).replace(/\s+/g, ' ').trim().slice(0, 120);
+      if (!title) throw new Error('tom titel');
+      bus.emit({ type: 'task', task: setTaskTitle(ctx.subtask.taskId, title) });
+      return 'Titeln är ändrad.';
     },
   },
   {
@@ -479,13 +589,78 @@ const TOOLS: Tool[] = [
   {
     name: 'acquire_resource',
     kinds: 'all',
-    description: `Lås en delad resurs innan du använder den, så att två agenter inte krockar: ${RESOURCES.join(', ')}. Släpps automatiskt när din tur slutar. Är den upptagen: gör annat och försök senare, eller rapportera.`,
-    inputSchema: { type: 'object', properties: { resource: { type: 'string', enum: [...RESOURCES] } }, required: ['resource'] },
+    description: `Lås en delad resurs innan du använder den, så att två agenter inte krockar: ${RESOURCES.join(', ')}, projektets virtuella maskiner och de resurser som står under Delade resurser i din prompt. Ange what: branchen eller PR:en du kör, så kan två kort på samma sak dela. Är den upptagen ställs du i kö: förbered allt utom att starta, rapportera watching, och du väcks när den är din (portarna frigörs åt dig). Släpps när din tur slutar.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        resource: { type: 'string' },
+        what: { type: 'string', description: 'Branchen eller PR:en du kör på den, t.ex. PR 862.' },
+      },
+      required: ['resource'],
+    },
     run: (a, ctx) => {
-      const holder = locks.get(a.resource);
-      if (holder && holder !== ctx.subtask.id) return `Upptagen av kort #${holder}.`;
-      locks.set(a.resource, ctx.subtask.id);
-      return `${a.resource} är din.`;
+      const shared = resourceOf(ctx.team, String(a.resource));
+      if (!shared) {
+        const own = Object.keys(ctx.team.resources);
+        throw new Error(`okänd resurs ${a.resource}. Finns: ${[...RESOURCES, ...own].join(', ')}`);
+      }
+      const { key, label } = shared;
+      const me = ctx.subtask.id;
+      const what = String(a.what ?? '').trim();
+      const holder = locks.get(key);
+      const ports = shared.ports.length ? ` Portar: ${shared.ports.join(', ')}.` : '';
+      if (holder === undefined || holder === me) {
+        locks.set(key, me);
+        using.set(key, what);
+        queues.set(key, (queues.get(key) ?? []).filter((w) => w.id !== me));
+        return `${label} är din.${ports}`;
+      }
+      if (holder === -1) return `${label} används av ett bygge just nu. Försök igen om en stund.`;
+      if (sameUse(what, using.get(key) ?? '')) {
+        if (!sharers.has(key)) sharers.set(key, new Set());
+        sharers.get(key)!.add(me);
+        return `Kort #${holder} kör redan ${using.get(key)} på ${label}. Använd den instansen och starta inget eget; ni delar den. Starta inte om den och rör inte data som kort #${holder} testar med.`;
+      }
+      const queue = queues.get(key) ?? [];
+      if (!queue.some((w) => w.id === me)) queue.push({ id: me, what });
+      queues.set(key, queue);
+      const place = queue.findIndex((w) => w.id === me) + 1;
+      return `${label} används av kort #${holder}${using.get(key) ? ` (${using.get(key)})` : ''}. Du står som nummer ${place} i kön. Förbered allt utom att starta (branch, beroenden, bygge, databas), rapportera sedan watching. Du väcks när ${label} är din, och servern frigör dess portar åt dig.`;
+    },
+  },
+  {
+    name: 'use_app',
+    kinds: 'all',
+    description:
+      'Använd en av projektets appar lokalt (se Projektets appar i din prompt) i stället för att starta en egen. Startas från din worktree om ingen använder den, delas med kort på samma PR (what), annars står du i kö och väcks när den är din. Väntar tills appen svarar och ger adressen, inloggningen och var loggen är. restart: true startar om den från din worktree (bara när ingen annan använder den).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        app: { type: 'string', description: 'Appens id.' },
+        what: { type: 'string', description: 'Branchen eller PR:en du kör, t.ex. PR 862.' },
+        restart: { type: 'boolean' },
+      },
+      required: ['app'],
+    },
+    run: (a, ctx) => useApp(ctx.team, String(a.app), ctx.subtask, String(a.what ?? ctx.subtask.branch ?? ''), a.restart === true),
+  },
+  {
+    name: 'done_with_app',
+    kinds: 'all',
+    description: `Säg att du är klar med en app du använt med use_app. Stoppa den inte själv: nästa i kön får den, annars väljer ${OWNER} om den ska stängas eller få fortsätta.`,
+    inputSchema: { type: 'object', properties: { app: { type: 'string' } }, required: ['app'] },
+    run: (a, ctx) => doneWithApp(ctx.team, String(a.app), ctx.subtask),
+  },
+  {
+    name: 'free_port',
+    kinds: 'all',
+    description:
+      'Frigör en port som ett tidigare kort lämnat en process på (en dev-server, en backend). Stoppa aldrig andras processer själv med kill: det nekas, och det här verktyget gör det rätt. Stoppar allt som kör kvar i det gamla kortets worktree. Processer som inte hör till något kort, eller ett kort som arbetar just nu, rörs inte; då får du veta vad som håller porten.',
+    inputSchema: { type: 'object', properties: { port: { type: 'number' } }, required: ['port'] },
+    run: (a, ctx) => {
+      const port = Number(a.port);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('ogiltig port');
+      return freePort(port, ctx.subtask);
     },
   },
   {
@@ -493,8 +668,9 @@ const TOOLS: Tool[] = [
     kinds: 'all',
     description: 'Släpp en resurs du låst.',
     inputSchema: { type: 'object', properties: { resource: { type: 'string' } }, required: ['resource'] },
-    run: (a, ctx) => {
-      if (locks.get(a.resource) === ctx.subtask.id) locks.delete(a.resource);
+    run: async (a, ctx) => {
+      const shared = resourceOf(ctx.team, String(a.resource));
+      await letGo(shared?.key ?? String(a.resource), ctx.subtask.id);
       return 'Släppt.';
     },
   },
@@ -552,6 +728,62 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: 'consult',
+    kinds: 'all',
+    description:
+      'Fråga en av projektets konsulter (se Konsulter i din prompt): en jurist om en policy, en illustratör om en bild. En fråga i taget, med allt konsulten behöver veta i frågan; den ser inte repot eller kortet. Svaret kommer tillbaka till dig (och bilder sparas och visas på kortet); du gör sedan jobbet med det. Inga personuppgifter, kunddata eller hemligheter.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        consultant: { type: 'string', description: 'Konsultens id eller namn.' },
+        question: { type: 'string', description: 'Frågan eller beställningen, med sammanhanget: vad projektet är, vem det är till, befintlig text att utgå från, format du vill ha tillbaka.' },
+        save_to: { type: 'string', description: 'Bara för en bildkonsult: relativ sökväg i din worktree att kopiera bilden till.' },
+        size: { type: 'string', enum: ['1024x1024', '1536x1024', '1024x1536'], description: 'Bara för en bildkonsult på OpenAI.' },
+      },
+      required: ['consultant', 'question'],
+    },
+    run: async (a, ctx) => {
+      const question = String(a.question);
+      const target = findConsultant(ctx.team.id, String(a.consultant));
+      if (!target) throw new Error(`ingen konsult som heter ${a.consultant}. Finns: ${loadConsultants(ctx.team.id).map((c) => c.id).join(', ') || 'inga'}`);
+      if (target.askers !== 'all' && !target.askers.includes(ctx.role.id)) {
+        const may = target.askers.map((id) => ctx.team.roles.find((r) => r.id === id)).filter(Boolean).map((r) => `${r!.id} (${who(r!)})`);
+        throw new Error(`Du får inte fråga ${consultantWho(target)}. ${may.length ? `Be ${may.join(' eller ')} med delegate.` : 'Ingen i teamet får fråga just nu.'}`);
+      }
+      // The owner's consent: every question, the first on this card, or never.
+      const mark = `${ctx.subtask.id}:${target.id}`;
+      if (target.consent === 'always' || (target.consent === 'session' && !consented.has(mark))) {
+        const { allow, reason } = await askApproval(ctx.subtask, `Fråga ${consultantWho(target)}`, { command: question });
+        if (!allow) throw new Error(`${OWNER} sa nej till frågan${reason ? `: ${reason}` : ''}. Gör utan konsulten, eller fråga ${OWNER} hur.`);
+        consented.add(mark);
+      }
+      bus.emit({ type: 'event', event: addEvent(ctx.subtask.id, 'system', `Frågar ${consultantWho(target)}: ${question.length > 600 ? `${question.slice(0, 600)} …` : question}`) });
+      // A service reached through MCP: the agent uses the server's tools itself, with the consultant's instructions.
+      if (target.mcp || !API_PROVIDERS.includes(target.provider as ApiProvider)) {
+        const server = target.mcp;
+        if (!server) throw new Error(`${consultantWho(target)} har ingen MCP-server vald (Inställningar → Konsulter).`);
+        bus.emit({ type: 'event', event: addEvent(ctx.subtask.id, 'system', `${consultantWho(target)} nås via MCP-servern ${server}.`) });
+        return [
+          `${consultantWho(target)} är ${PROVIDER_LABEL[target.provider]} via MCP-servern \`${server}\`. Använd dess verktyg (mcp__${server}__…) för beställningen, enligt konsultens instruktioner:`,
+          '',
+          target.instructions,
+          '',
+          `Beställningen: ${question}`,
+          '',
+          `Har du inte verktygen: rapportera needs-you och be ${OWNER} ge din roll MCP-servern ${server}, eller logga in på den.${a.save_to ? ` Spara resultatet i ${a.save_to}.` : ''}`,
+        ].join('\n');
+      }
+      const { consultant, answer } = await consult(ctx.team.id, target.id, question, { saveTo: a.save_to, worktree: ctx.subtask.worktree, size: a.size });
+      for (const img of answer.images) bus.emit({ type: 'event', event: addEvent(ctx.subtask.id, 'image', img.url) });
+      if (answer.text) {
+        const shown = answer.text.length > 4000 ? `${answer.text.slice(0, 4000)} …` : answer.text;
+        bus.emit({ type: 'event', event: addEvent(ctx.subtask.id, 'system', `${consultantWho(consultant)} svarar:\n\n${shown}`) });
+      }
+      const pics = answer.images.map((i) => `Bild: ${i.path}${i.copiedTo ? ` (kopierad till ${i.copiedTo})` : ''}`).join('\n');
+      return [answer.text, pics].filter(Boolean).join('\n\n');
+    },
+  },
+  {
     name: 'save_note',
     kinds: 'all',
     description:
@@ -583,8 +815,8 @@ const TOOLS: Tool[] = [
       required: ['title', 'kind', 'facts', 'source'],
     },
     run: (a, ctx) => {
-      const item = suggestInfra(ctx.team, a, `Föreslaget av ${ctx.role.name} på kort #${ctx.subtask.id}: ${String(a.source ?? '')}`.slice(0, 300));
-      const notice = addNotice(ctx.team.id, ctx.subtask.id, `${ctx.role.name} föreslår en post under Infrastruktur: ${item.title}. Godkänn eller avvisa under Inställningar → Infrastruktur (#/${ctx.team.id}/settings).`);
+      const item = suggestInfra(ctx.team, a, `Föreslaget av ${who(ctx.role)} på kort #${ctx.subtask.id}: ${String(a.source ?? '')}`.slice(0, 300));
+      const notice = addNotice(ctx.team.id, ctx.subtask.id, `${who(ctx.role)} föreslår en post under Infrastruktur: ${item.title}. Godkänn eller avvisa under Inställningar → Infrastruktur (#/${ctx.team.id}/settings).`);
       bus.emit({ type: 'notice', notice });
       return `Föreslaget som "${item.title}". ${OWNER} ser det under Inställningar → Infrastruktur och godkänner.`;
     },
@@ -690,7 +922,8 @@ async function handle(msg: RpcRequest, ctx: Ctx): Promise<unknown | undefined> {
       }
       try {
         const text = await tool.run(args, fresh);
-        return { content: [{ type: 'text', text }] };
+        const waiting = waitingNote(fresh.subtask.id);
+        return { content: [{ type: 'text', text: waiting ? `${text}\n\n${waiting}` : text }] };
       } catch (err) {
         return { content: [{ type: 'text', text: (err as Error).message }], isError: true };
       }

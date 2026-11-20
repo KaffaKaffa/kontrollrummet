@@ -41,7 +41,7 @@ export type Pose =
   | 'test';
 
 /** What the cards say the agent must do. */
-export type Duty = 'work' | 'test' | 'ask' | 'approve' | 'watch' | 'pr' | 'queue' | 'sleep' | 'despair' | 'patrol' | 'whiteboard' | 'free';
+export type Duty = 'work' | 'test' | 'ask' | 'approve' | 'watch' | 'queue' | 'sleep' | 'despair' | 'patrol' | 'whiteboard' | 'free';
 
 export type Prop = 'mug' | 'phone' | 'headset' | 'can' | 'paddle' | 'soda' | null;
 
@@ -110,8 +110,8 @@ export function dutyOf(role: Role, cards: Subtask[], tasks: Task[], approvals: A
   if (quota) return { duty: 'sleep', card: quota };
   const watching = find('watching');
   if (watching) return { duty: role.kind === 'lead' ? 'patrol' : 'watch', card: watching };
-  const pr = find('pr-open');
-  if (pr) return { duty: 'pr', card: pr };
+  // An open PR waits for others (a review, a merge), often for days: the agent is done with it
+  // and free until feedback comes back, which puts the card to work again.
   const queued = find('queued');
   if (queued) return { duty: 'queue', card: queued };
   // A card that failed in the last half hour: head in hands for a while.
@@ -288,8 +288,6 @@ export class Director implements Floor {
       case 'watch':
         a.nextToss = this.clock + 2 + this.rand(a) * 3;
         return this.go(a, seat, 'sit-feetup');
-      case 'pr':
-        return this.go(a, seat, 'sit-lean');
       case 'sleep':
         return this.go(a, seat, 'sit-sleep');
       case 'despair':

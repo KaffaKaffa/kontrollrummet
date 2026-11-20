@@ -8,7 +8,8 @@ import { promisify } from 'node:util';
 import { bus } from './bus.ts';
 import { getTeam, type Team } from './roles.ts';
 import { ascCall, ascToken, playCall, playToken, invalidateReleases, latestMsix, msixDir, msStoreCall, msStoreToken, type BuiltMsix, type StoreApp } from './releases.ts';
-import { expandHome } from './config.ts';
+import { DATA_DIR, expandHome } from './config.ts';
+import { holdRestart } from './holds.ts';
 import { lockForDeploy, unlockDeploy } from './mcp.ts';
 import { sleepVm, vmFor, wakeVm, type VmConfig } from './vms.ts';
 
@@ -33,10 +34,48 @@ export interface Job {
   endedAt: string | null;
 }
 
-const jobs = new Map<string, Job>();
 const MAX_LOG = 200_000;
+/** The last jobs, kept on disk so the history (and how a build ended) outlives a restart. */
+const JOBS_FILE = join(DATA_DIR, 'jobs.json');
+const KEEP = 30;
 
-export const listJobs = () => [...jobs.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 30);
+function loadJobs(): Map<string, Job> {
+  try {
+    const list = JSON.parse(readFileSync(JOBS_FILE, 'utf8')) as Job[];
+    // Running when the server went: its process went with it.
+    for (const j of list)
+      if (j.status === 'running') {
+        j.status = 'failed';
+        j.endedAt = j.endedAt ?? new Date().toISOString();
+        j.log += '\n✗ Avbröts: servern stängdes medan jobbet körde. Starta det igen.\n';
+      }
+    return new Map(list.map((j) => [j.id, j]));
+  } catch {
+    return new Map();
+  }
+}
+
+const jobs = loadJobs();
+let saveTimer: NodeJS.Timeout | undefined;
+
+function saveJobs(now = false) {
+  clearTimeout(saveTimer);
+  const write = () => {
+    try {
+      mkdirSync(DATA_DIR, { recursive: true });
+      writeFileSync(JOBS_FILE, JSON.stringify(listJobs()));
+    } catch {
+      // History only: the job itself goes on.
+    }
+  };
+  if (now) write();
+  else saveTimer = setTimeout(write, 5000);
+}
+
+// A restart waits for running jobs: a build's processes would die with the server.
+holdRestart(() => [...jobs.values()].filter((j) => j.status === 'running').length);
+
+export const listJobs = () => [...jobs.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, KEEP);
 
 function emit(job: Job) {
   bus.emit({ type: 'job', job: { ...job, log: job.log.slice(-20_000) } });
@@ -45,6 +84,7 @@ function emit(job: Job) {
 function append(job: Job, text: string) {
   job.log = (job.log + text).slice(-MAX_LOG);
   emit(job);
+  saveJobs();
 }
 
 function startJob(team: string, app: string, kind: Job['kind'], title: string): Job {
@@ -52,7 +92,9 @@ function startJob(team: string, app: string, kind: Job['kind'], title: string): 
   if (busy) throw new Error(`${app} har redan ett jobb igång: ${busy.title}`);
   const job: Job = { id: randomUUID(), team, app, kind, title, status: 'running', log: '', startedAt: new Date().toISOString(), endedAt: null };
   jobs.set(job.id, job);
+  for (const old of [...jobs.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(KEEP)) jobs.delete(old.id);
   emit(job);
+  saveJobs(true);
   return job;
 }
 
@@ -61,6 +103,7 @@ function endJob(job: Job, ok: boolean, line?: string) {
   job.status = ok ? 'done' : 'failed';
   job.endedAt = new Date().toISOString();
   emit(job);
+  saveJobs(true);
   invalidateReleases(job.team);
 }
 
