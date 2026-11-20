@@ -401,3 +401,7 @@ npm run typecheck
 - `windows/`: `Kontrollrummet.cs` och ikonen; byggs av `scripts/install-windows.ps1`.
 - `scripts/`: start, installation, porträtt och 3D-gubbar.
 - `web/src/office3d/`: Kontoret i 3D (scen, planlösning, beteenden, gubbar och möbler).
+
+## Licens
+
+MIT, se [LICENSE](LICENSE). Säkerhetsproblem rapporteras privat, se [SECURITY.md](SECURITY.md). Vill du bidra: [CONTRIBUTING.md](CONTRIBUTING.md).
