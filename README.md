@@ -1,24 +1,75 @@
-# Kontrollrummet
+<p align="center">
+  <img src="web/public/icons/icon-512.png" width="140" alt="Kontrollrummets ikon">
+</p>
 
-Ett agentteam av Claude Code-agenter för dina repon, på din egen dator: macOS eller Windows.
+<h1 align="center">Kontrollrummet</h1>
 
-Varje team arbetar i ett repo. Det har en teamleader, en arkitekt, en bug-agent, en designer, en utvecklare per app och en testare, och alla är vanliga Claude Code-sessioner. Du är projektledare:
-- Du lämnar uppgifter.
-- Teamleadern delar ut dem.
-- Varje kort arbetas i en egen git-worktree och slutar i en PR.
+<p align="center">
+  <b>Ett agentteam av Claude Code-agenter för dina repon, på din egen dator.</b>
+</p>
 
-Allt syns på en board, där du kan följa varje uppgift, svara när en agent undrar något och godkänna det som kräver lov.
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white" alt="macOS">
+  <img src="https://img.shields.io/badge/Windows_10%2F11-0078D4?logo=windows&logoColor=white" alt="Windows">
+  <img src="https://img.shields.io/badge/Node-22.18%2B-5FA04E?logo=nodedotjs&logoColor=white" alt="Node 22.18+">
+  <img src="https://img.shields.io/badge/Claude_Code-prenumeration-D97757?logo=claude&logoColor=white" alt="Claude Code">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licens-MIT-6D4AFF" alt="MIT-licens"></a>
+</p>
 
-Kontrollrummet består av:
-- **Kontoret:** boarden och medarbetarna på samma sida. En agents inställningar (modell, instruktioner med mera) öppnas med ett klick. Med **Kontoret 3D** syns teamet som ett kontor i 3D, där varje agent gör det dess kort säger.
-- **Planer:** arkitektens planer, som du genomför, parkerar eller kastar.
-- **Releases:** vilken version av varje app som ligger i test, är på väg och är ute i App Store, Google Play och Microsoft Store. Här finns också knappar för testbuild och prod.
-- **Gudfadern:** din egen Claude utan team, i valfri mapp och på valfritt konto. Här bygger du vidare på kontrollrummet, och den ersätter Claude Code-appen.
-- **Inkorgen:** det som väntar på dig, som beslut, godkännanden, PR:er att merga och PR:er att granska. En PR som du ombetts granska kan du ge till teamleadern med ett klick.
-- **Infrastruktur och loggning:** var varje projekt körs (moln, konton, resurser) och var felen läses, identifierat av en agent och redigerbart.
-- **En egen app**, Kontrollrummet.app på Macen och Kontrollrummet.exe på Windows, med systemnotiser när något är klart eller behöver dig. **Skrivborden** når du från Claude-appen i telefonen via Remote Control.
+<p align="center">
+  <a href="#kom-igång">Kom igång</a> ·
+  <a href="#anpassa">Anpassa</a> ·
+  <a href="#så-fungerar-det">Så fungerar det</a> ·
+  <a href="#säkerhet">Säkerhet</a> ·
+  <a href="SETUP.md">SETUP.md</a>
+</p>
 
-Allt körs på datorn där repona, verktygen och nycklarna finns, och på Macen även Xcode, signeringen och simulatorerna. Det kräver ingen API-nyckel till Claude, eftersom agenterna använder din vanliga Claude Code-inloggning och prenumeration.
+---
+
+Varje team arbetar i ett repo, och alla i teamet är vanliga Claude Code-sessioner:
+
+<table align="center">
+  <tr>
+    <td align="center"><img src="library/avatars/teamleader.png" width="88" alt=""><br><sub><b>Teamleader</b></sub></td>
+    <td align="center"><img src="library/avatars/architect.png" width="88" alt=""><br><sub><b>Arkitekt</b></sub></td>
+    <td align="center"><img src="library/avatars/bug.png" width="88" alt=""><br><sub><b>Bug-agent</b></sub></td>
+    <td align="center"><img src="library/avatars/designer.png" width="88" alt=""><br><sub><b>Designer</b></sub></td>
+    <td align="center"><img src="library/avatars/ios.png" width="88" alt=""><br><sub><b>iOS</b></sub></td>
+    <td align="center"><img src="library/avatars/web.png" width="88" alt=""><br><sub><b>Webb</b></sub></td>
+    <td align="center"><img src="library/avatars/tester.png" width="88" alt=""><br><sub><b>Testare</b></sub></td>
+  </tr>
+</table>
+
+Du är projektledare. Du lämnar uppgifter, teamleadern delar ut dem, och varje kort arbetas i en egen git-worktree och slutar i en PR. Allt syns på en board, där du kan följa varje uppgift, svara när en agent undrar något och godkänna det som kräver lov.
+
+```mermaid
+flowchart LR
+    Du(["🧑 Du"]) -- uppgift --> TL["Teamleader"]
+    TL -- kort --> D["Utvecklare"]
+    TL -- kort --> DS["Designer"]
+    D --> WT["egen worktree<br/>och branch"]
+    DS --> WT
+    WT --> PR["PR"]
+    PR --> T["Testare"]
+    T --> IN["📥 Inkorgen"]
+    IN -- merga --> Du
+```
+
+> [!TIP]
+> Det kräver ingen API-nyckel till Claude. Agenterna använder din vanliga Claude Code-inloggning och prenumeration, och allt körs på datorn där repona, verktygen och nycklarna finns, på Macen även Xcode, signeringen och simulatorerna.
+
+## Vad som ingår
+
+| | | |
+|---|---|---|
+| 🏢 | **Kontoret** | Boarden och medarbetarna på samma sida. En agents inställningar (modell, instruktioner med mera) öppnas med ett klick. Med **Kontoret 3D** syns teamet som ett kontor i 3D, där varje agent gör det dess kort säger. |
+| 📐 | **Planer** | Arkitektens planer, som du genomför, parkerar eller kastar. |
+| 🚀 | **Releases** | Vilken version av varje app som ligger i test, är på väg och är ute i App Store, Google Play och Microsoft Store, med knappar för testbuild och prod. |
+| 🎩 | **Gudfadern** | Din egen Claude utan team, i valfri mapp och på valfritt konto. Här bygger du vidare på kontrollrummet, och den ersätter Claude Code-appen. |
+| 📥 | **Inkorgen** | Det som väntar på dig: beslut, godkännanden, PR:er att merga och PR:er att granska. En PR som du ombetts granska kan du ge till teamleadern med ett klick. |
+| ☁️ | **Infrastruktur och loggning** | Var varje projekt körs (moln, konton, resurser) och var felen läses, identifierat av en agent och redigerbart. |
+| 💻 | **En egen app** | Kontrollrummet.app på Macen och Kontrollrummet.exe på Windows, med systemnotiser när något är klart eller behöver dig. |
+| 📱 | **Skrivborden** | Nås från Claude-appen i telefonen via Remote Control. |
 
 ---
 
@@ -44,7 +95,8 @@ Claude kontrollerar och installerar det som saknas, installerar Kontrollrummet m
   - App Store Connect-, Play- och Partner Center-nycklar för Releases
   - Parallels för Windows-tester från en Mac
 
-### Installera för hand
+<details>
+<summary><b>Installera för hand</b></summary>
 
 ```
 git clone https://github.com/KaffaKaffa/kontrollrummet.git ~/Dev/kontrollrummet
@@ -77,7 +129,10 @@ npm install
 
 **Windows:** `install:windows` bygger `Kontrollrummet.exe` med ikonen (med C#-kompilatorn som finns i Windows) i `%LOCALAPPDATA%\Kontrollrummet`, och lägger den i Autostart (`--supervise`: servern och skrivborden, en post "Kontrollrummet" i Aktivitetshanteraren), i Start-menyn och på skrivbordet. Där öppnar den tavlan i ett eget appfönster i Edge eller Chrome. Inloggningar öppnas i Windows Terminal, och tokens sparas krypterade i `~/.control-room/secrets`. `npm run uninstall:windows` tar bort det.
 
-Data, loggar och inställningar finns kvar i `~/.control-room` efter en avinstallation.
+</details>
+
+> [!NOTE]
+> Data, loggar och inställningar finns kvar i `~/.control-room` efter en avinstallation.
 
 ---
 
@@ -172,6 +227,9 @@ teams/<id>/
 
 `team.local.json` läggs ovanpå `team.json`. Objekt slås ihop nyckel för nyckel, och för allt annat vinner den lokala filen.
 
+<details>
+<summary><b>Alla fält i team.json och team.local.json</b></summary>
+
 | Fält | Var | Vad |
 |---|---|---|
 | `name` | team.json | Namnet i topbaren |
@@ -188,6 +246,8 @@ teams/<id>/
 | `releases.apps` | team.json | Store-apparna, se Releases nedan |
 | `releases.appStoreConnect`, `releases.play` | local | Var nycklarna finns |
 | `vms` | local | Virtuella maskiner som agenterna får be om att starta |
+
+</details>
 
 Ett nytt team skapas enklast med guiden (`+` i topbaren), men det är bara en ny mapp och går lika bra att skriva för hand. Topbaren visar teamen med logga och antal kort som väntar på dig.
 
@@ -253,6 +313,9 @@ Prompten byggs i den här ordningen: `shared.md` i roten (gäller alla team), te
 ### Kontoret i 3D
 Växeln **Skrivbord | Kontoret 3D** överst i Kontoret visar teamet som ett kontor. Den som jobbar sitter och skriver vid sitt skrivbord, den som väntar på dig räcker upp handen, den som bevakar lägger upp fötterna och kastar pappersbollar, och den som är ledig spelar pingis, hämtar kaffe, sitter i soffan och så vidare. Teamleadern går runt med headset och går fram till den som får ett nytt kort. Klicka på en gubbe för att öppna kortet.
 
+<details>
+<summary><b>Gubbar, animationer och inredning med Meshy</b></summary>
+
 Gubbar, animationer och inredning görs med [Meshy](https://www.meshy.ai) (API-nyckel i nyckelringen: `security add-generic-password -U -s control-room-meshy -a meshy -w`, i en vanlig terminal):
 
 - `node scripts/characters.mjs balance` visar krediterna, och `library [sök]` listar Meshys animationsbibliotek (gratis).
@@ -262,6 +325,8 @@ Gubbar, animationer och inredning görs med [Meshy](https://www.meshy.ai) (API-n
 - Saknas en modell används en enkel gubbe eller möbel byggd i kod. `?gubbe=<id>` i adressen visar alla som en viss gubbe, för att granska en ny modell.
 - Pingisbordet är byggt i kod med tävlingsmått. Spelarnas slag och bollen går på samma klocka, och ibland blir det rundpingis med upp till sju. `?pingis=<antal>` i adressen startar en match direkt och zoomar in på bordet. `/office/measure.html?clip=<klipp>` visar var handen är i ett klipp, bild för bild (så mättes slaget).
 - UI:t använder Bandclouds design-tokens, kopierade till `web/src/tokens.css`. `npm run tokens:sync` hämtar en ny kopia, och sökvägen sätts med `TOKENS_CSS`.
+
+</details>
 
 ### Skrivborden i Claude-appen
 - `desks/teamleader` och `desks/architect` är Remote Control-sessioner. I Claude-appen heter de "Kontrollrummet · Teamleader" och "Kontrollrummet · Arkitekt", och de agerar som du på boarden.
@@ -381,6 +446,9 @@ Testaren och utvecklarna kan be om att få starta VM:en med `start_vm`. Frågan 
 - Agenterna pushar och öppnar PR:er i ditt namn via `gh`.
 - **Nycklar:** OpenAI- och Gemini-nycklarna (`control-room-openai`, `control-room-gemini`) och tokens (Cloudflare, Expo, Figma) ligger i nyckelringen på macOS och krypterade för din användare (DPAPI) i `~/.control-room/secrets` på Windows. Store-nycklarna ligger där `team.local.json` pekar. Inget av det finns i repot.
 - **Infrastrukturlistan:** det en agent eller sidan skickar kontrolleras på servern. Kontroller som körs av sig själva får bara läsa (list, show, whoami), inloggningar körs bara i ett synligt terminalfönster när du klickar, och variabler som `PATH` eller `CLAUDE_*` kan inte sättas.
+
+> [!WARNING]
+> Spärrlistan matchar mönster och är inte vattentät. Agenterna kör på din dator med dina nycklar och pushar i ditt namn.
 
 ## Felsökning
 - **Loggar** finns i `~/.control-room/logs/` (`server.log`, `desk-*.log`).
