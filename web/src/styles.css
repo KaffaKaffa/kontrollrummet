@@ -352,6 +352,15 @@ main {
   color: var(--color-brand-text);
 }
 
+.badge-review-wait {
+  display: inline-block;
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--color-bg-sunken);
+  color: var(--color-fg-secondary);
+}
+
 .badge-watching {
   background: var(--color-accent-tint);
   color: var(--color-accent-text);
@@ -723,6 +732,11 @@ main {
 
 .inbox-merge-main a:hover {
   color: var(--color-brand-text);
+}
+
+.inbox-reviewing {
+  border-color: var(--color-line-default);
+  color: var(--color-fg-secondary);
 }
 
 .merged {
@@ -1529,11 +1543,67 @@ main:has(.office-layout) {
 
 .office-layout {
   display: grid;
-  grid-template-columns: minmax(0, calc(var(--space-160) * 2.6)) minmax(0, 1fr);
+  grid-template-columns: minmax(0, var(--board-width, calc(var(--space-160) * 2.6))) minmax(0, 1fr);
   align-items: start;
 }
 
+/* The left panel's edge: drag it wider; it never goes narrower than its default. */
+.board-resizer {
+  position: fixed;
+  z-index: 5;
+  top: var(--layout-topbar-height);
+  bottom: 0;
+  left: calc(var(--space-160) * 2.6);
+  width: 12px;
+  margin-left: -6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.board-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 5px;
+  width: 2px;
+  background: transparent;
+  transition: background var(--dur-140) var(--ease-standard);
+}
+
+.board-resizer-grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-6);
+  background: var(--color-brand-fill);
+  color: var(--color-fg-on-brand);
+  font-size: var(--text-caption-size);
+  font-weight: var(--text-headline-weight);
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-140) var(--ease-standard);
+}
+
+.board-resizer:hover::before,
+.board-resizer.is-dragging::before {
+  background: var(--color-brand-fill);
+}
+
+.board-resizer:hover .board-resizer-grip,
+.board-resizer.is-dragging .board-resizer-grip {
+  opacity: 1;
+}
+
+.board-resizer.is-dragging ~ * {
+  user-select: none;
+}
+
 .board-column {
+  min-width: calc(var(--space-160) * 2.6);
   position: sticky;
   top: var(--layout-topbar-height);
   height: calc(100dvh - var(--layout-topbar-height));
@@ -1824,6 +1894,57 @@ main:has(.office-layout) {
   accent-color: var(--color-brand-fill);
 }
 
+/* ------------------------------------------------------------ looks (an agent's character) */
+
+.looks {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.looks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--space-80) + var(--space-16)), 1fr));
+  gap: var(--space-8);
+  max-height: 22rem;
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+
+.looks-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border: 2px solid transparent;
+  border-radius: var(--radius-12);
+  background: var(--color-bg-sunken);
+  color: var(--color-fg-secondary);
+  font: inherit;
+  font-size: var(--text-caption-size);
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+}
+
+.looks-pick img {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+}
+
+.looks-pick[aria-checked='true'] {
+  border-color: var(--color-brand-fill);
+  color: var(--color-fg-primary);
+}
+
+.field input[type='color'] {
+  padding: var(--space-4);
+  width: calc(var(--space-80) + var(--space-16));
+}
+
 /* ------------------------------------------------------------ narrow screens */
 
 @media (max-width: 1023px) {
@@ -1831,7 +1952,12 @@ main:has(.office-layout) {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .board-resizer {
+    display: none;
+  }
+
   .board-column {
+    min-width: 0;
     position: static;
     height: auto;
     border-right: 0;
@@ -3042,4 +3168,397 @@ main:has(.office-layout) {
 .review-action {
   display: block;
   margin-top: var(--space-4);
+}
+
+/* ---------------------------------------------------------------- local apps */
+
+.devapp-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.devapp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-12);
+  border: 1px solid var(--color-line-hairline);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  color: var(--color-fg-secondary);
+  font: inherit;
+  font-size: var(--text-footnote-size);
+  cursor: pointer;
+  transition: border-color var(--dur-140) var(--ease-standard);
+}
+
+.devapp-chip:hover {
+  border-color: var(--color-line-strong);
+  color: var(--color-fg-primary);
+}
+
+.devapp-chip:focus-visible {
+  outline: 2px solid var(--color-line-focus);
+  outline-offset: 2px;
+}
+
+.devapp-asks {
+  border-color: var(--color-state-warning);
+}
+
+.devapp-host {
+  color: var(--color-fg-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-size);
+}
+
+.devapp-dot {
+  display: inline-block;
+  width: var(--space-8);
+  height: var(--space-8);
+  border-radius: var(--radius-full);
+  background: var(--color-fg-disabled);
+  vertical-align: middle;
+}
+
+.devapp-running .devapp-dot,
+.devapp-dot.devapp-running {
+  background: var(--color-state-success);
+}
+
+.devapp-starting .devapp-dot,
+.devapp-dot.devapp-starting,
+.devapp-stopping .devapp-dot,
+.devapp-dot.devapp-stopping {
+  background: var(--color-state-warning);
+  animation: pulse var(--dur-800) var(--ease-standard) infinite alternate;
+}
+
+.devapp-failed .devapp-dot,
+.devapp-dot.devapp-failed {
+  background: var(--color-state-danger);
+}
+
+.devapp-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-16);
+}
+
+.devapp-ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-12);
+  background: var(--color-state-warning-tint);
+  color: var(--color-fg-primary);
+}
+
+.devapp-ask span {
+  flex: 1 1 16rem;
+}
+
+.devapp-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-8);
+}
+
+.devapp-from {
+  flex: 1 1 16rem;
+}
+
+.devapp-who {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  color: var(--color-fg-secondary);
+  font-size: var(--text-footnote-size);
+}
+
+.devapp-log {
+  height: min(55dvh, 32rem);
+  margin: 0;
+  overflow: auto;
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-12);
+  background: var(--color-bg-sunken);
+  color: var(--color-fg-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-size);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.devapp-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  margin: 0;
+  padding: var(--space-16);
+  border: 1px solid var(--color-line-hairline);
+  border-radius: var(--radius-12);
+}
+
+.devapp-form legend {
+  padding: 0 var(--space-6);
+  font-weight: 600;
+}
+
+.devapp-form .mono {
+  font-family: var(--font-mono);
+}
+
+@media (max-width: 720px) {
+  .devapp-host {
+    display: none;
+  }
+}
+
+.devapp-who .field-check,
+.devapp-form .field-check {
+  display: flex;
+  gap: var(--space-8);
+  align-self: start;
+}
+
+/* A notice and what the owner can do with it: Klart, Öppna, Stäng. */
+.notice-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-4);
+}
+
+.notice-actions .btn {
+  min-height: var(--space-32);
+  padding: 0 var(--space-12);
+}
+
+/* Consultants: specialists outside the office, asked over an API. */
+.office-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  margin: var(--space-16) var(--space-24) 0;
+}
+
+.office-bar .office-mode {
+  margin: 0;
+}
+
+.consultant-faces {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.consultant-face-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.consultant-face-btn:hover .avatar {
+  outline: 2px solid var(--color-brand-fill);
+  outline-offset: 1px;
+}
+
+/* At a desk like the agents', with a dashed edge: not in the office, on call. */
+.desk-consultant {
+  border-style: dashed;
+}
+
+.consultant-askers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-16);
+}
+
+.consultant-head {
+  display: flex;
+  gap: var(--space-16);
+  align-items: center;
+}
+
+.consultant-face-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  align-items: center;
+}
+
+.face-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: var(--space-8);
+}
+
+.face-pick {
+  padding: 0;
+  border: 1px solid var(--color-line-default);
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--color-surface-1);
+  cursor: pointer;
+  aspect-ratio: 1;
+}
+
+.face-pick img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.consultant-reply {
+  padding: var(--space-12);
+  border-radius: var(--radius-12);
+  background: var(--color-bg-sunken);
+  white-space: pre-wrap;
+}
+
+.consultant-reply img {
+  max-width: 100%;
+  border-radius: var(--radius-12);
+}
+
+.consultant-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-8);
+}
+
+.consultant-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-12);
+  border: 1px solid var(--color-line-default);
+  border-radius: var(--radius-16);
+  background: var(--color-surface-1);
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: background var(--dur-140) var(--ease-standard);
+}
+
+.consultant-tile:hover:not(:disabled) {
+  background: var(--color-surface-3);
+}
+
+.consultant-tile .settings-muted {
+  font-size: var(--text-caption-size);
+}
+
+.consultant-tile-own {
+  border-style: dashed;
+}
+
+/* Tips under a consultant: services and models that are good at it. */
+.tips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+.tip {
+  padding: var(--space-2) var(--space-6);
+  border: 1px solid var(--color-line-default);
+  border-radius: var(--radius-6);
+  background: transparent;
+  color: var(--color-fg-tertiary);
+  font: inherit;
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  white-space: nowrap;
+}
+
+.tip-usable {
+  border-color: transparent;
+  background: var(--color-brand-tint);
+  color: var(--color-brand-text);
+}
+
+button.tip {
+  cursor: pointer;
+}
+
+button.tip:hover {
+  background: var(--color-brand-fill);
+  color: var(--color-fg-on-brand);
+}
+
+.tips-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0;
+}
+
+.tips-row .tips {
+  justify-content: flex-start;
+}
+
+.api-keys {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-bottom: var(--space-16);
+}
+
+.api-key-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.api-key-list li {
+  display: grid;
+  grid-template-columns: auto 10rem 1fr auto;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.api-key-list .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dot-ok {
+  background: var(--color-state-success, #3fb37f);
+}
+
+.dot-missing {
+  background: var(--color-fg-tertiary);
+}
+
+/* The chosen character up close, turning, with what it wears. */
+.looks-preview {
+  height: 280px;
+  border-radius: var(--radius-16);
+  overflow: hidden;
+  background: #f4ede4;
 }

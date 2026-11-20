@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Board, Subtask } from './api.ts';
+import { nameOf, type Board, type Subtask } from './api.ts';
 
 /**
  * System notifications when something needs the owner or is done: a card that
@@ -78,7 +78,7 @@ function cardNote(board: Board, s: Subtask, before: Subtask['status']): Note | n
   if (s.status === before) return null;
   const team = board.teams.find((t) => t.id === s.team);
   const role = team?.roles.find((r) => r.id === s.agent);
-  const who = `${role?.name ?? s.agent} #${s.id}${team && board.teams.length > 1 ? ` · ${team.name}` : ''}`;
+  const who = `${nameOf(role) ?? s.agent} #${s.id}${team && board.teams.length > 1 ? ` · ${team.name}` : ''}`;
   const href = `#/${s.team}/office/card/${s.id}`;
   const tag = `card-${s.id}`;
   if (s.status === 'needs-you') return { title: `${who} behöver dig`, body: firstLine(s.ask?.question ?? s.summary ?? s.brief), href, tag };
@@ -114,7 +114,7 @@ export function useSystemNotifications(board: Board) {
       const card = a.subtaskId != null ? board.subtasks.find((s) => s.id === a.subtaskId) : undefined;
       const role = card ? board.teams.find((t) => t.id === card.team)?.roles.find((r) => r.id === card.agent) : undefined;
       show({
-        title: `${card ? `${role?.name ?? card.agent} #${card.id}` : 'Gudfadern'} vill ha ditt godkännande`,
+        title: `${card ? `${nameOf(role) ?? card.agent} #${card.id}` : 'Gudfadern'} vill ha ditt godkännande`,
         body: firstLine(a.summary),
         href: card ? `#/${card.team}/office/card/${card.id}` : a.conversationId != null ? `#/gudfadern/${a.conversationId}` : '#/',
         tag: `approval-${a.id}`,

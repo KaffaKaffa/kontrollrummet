@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { APP_ROOT, CLAUDE_BIN, DATA_DIR, MAX_CONCURRENT, PORT, expandHome } from './config.ts';
 import { getAccount, identityTerminal } from './accounts.ts';
 import { countAlso, runningCount } from './agent.ts';
+import { heldBy } from './holds.ts';
 import { bus } from './bus.ts';
 import { NEVER, claudeEnv, contextOf, describeTool, toolResultText, userLine } from './claude-run.ts';
 import {
@@ -50,6 +51,7 @@ Du är Gudfadern: ${OWNERS} egen Claude i kontrollrummet, utan team och utan kor
 - Kontrollrummets kod ligger i ${APP_ROOT}. Arbetar du i en worktree av den: committa på samtalets branch, så tar ${OWNER} i bruk ändringarna med knappen "Ta i bruk". Starta aldrig om servern själv.
 - Med verktygen \`mcp__control-room__*\` agerar du som ${OWNER} på boarden: lämna uppgifter till ett team, följ kort och svara på dem. Arbete i ett teams repo hör hemma hos teamet, inte här, om ${OWNER} inte ber dig göra det själv.
 - Följ ${OWNERS} regler för commits och PR:er: ingen AI-attribution.
+- Kontrollrummets kod är publik (KaffaKaffa/kontrollrummet). En PR dit görs med skillen pr-kontrollrummet: inga namn på personer eller kunder, inga adresser eller nycklar, inte ens i kommentarer och commit-meddelanden.
 - Skriv på svenska, kort och utan utfyllnad. Sammanfatta inte vad du just gjort efter varje steg.
 - Det ett verktyg skriver ut läses om vid varje steg efter. Kapa utskrifter (\`| tail -40\`, \`--json\` med få fält) och läs bara de delar av filer du behöver.`;
 
@@ -425,7 +427,8 @@ let restartTimer: NodeJS.Timeout | undefined;
 
 function checkRestart() {
   if (!restartWanted) return;
-  const busy = runningCount();
+  // Agents, and builds whose processes would die with the server.
+  const busy = runningCount() + heldBy();
   bus.emit({ type: 'restart', waitingFor: busy });
   clearTimeout(restartTimer);
   if (busy > 0) {

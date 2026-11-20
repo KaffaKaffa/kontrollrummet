@@ -97,6 +97,118 @@
       "rigTask": "01a1f022-4742-73bd-a4fb-d23fe4208c68",
       "rigCharged": true,
       "rigged": true
+    },
+    "architect-summer": {
+      "imageTask": "01a1f85d-0589-7576-9002-7eaa9b91fb82",
+      "imageCharged": true,
+      "rigTask": "01a1f85e-6164-7235-901a-ed1fb3f6460d",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "backend-suit": {
+      "imageTask": "01a1f85e-b696-7423-ae2a-fba81493c1a5",
+      "imageCharged": true,
+      "rigTask": "01a1f85f-d3d9-758e-88d8-54dbe8c73111",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "dad": {
+      "imageTask": "01a1f860-1556-70b4-b714-a49031fd6a0e",
+      "imageCharged": true,
+      "rigTask": "01a1f861-34b5-74a9-815c-eeaf8e965331",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "designer-overalls": {
+      "imageTask": "01a1f861-74eb-77e5-9905-023f3ed0f14e",
+      "imageCharged": true,
+      "rigTask": "01a1f862-a637-7292-92dd-911914f26ce3",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "devops-hivis": {
+      "imageTask": "01a1f863-2077-76c0-b0bf-3b0dad4cafde",
+      "imageCharged": true,
+      "rigTask": "01a1f864-29c5-74a9-8b1f-eb764229ed4b",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "fullstack-tracksuit": {
+      "imageTask": "01a1f864-68fe-743a-8340-2eb16e291475",
+      "imageCharged": true,
+      "rigTask": "01a1f865-7357-7267-bb9a-5d95a50120af",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "gamer": {
+      "imageTask": "01a1f865-b260-7639-a256-f5e37c96c2e0",
+      "imageCharged": true,
+      "rigTask": "01a1f867-756a-703b-98b8-eb45558be9e6",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "goth": {
+      "imageTask": "01a1f867-b5a5-7025-9702-d61a405382d3",
+      "imageCharged": true,
+      "rigTask": "01a1f869-2af0-734d-b615-2cf0b2b8c83c",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "teacher": {
+      "imageTask": "01a1f869-6abc-7171-b43b-dc6f14cae856",
+      "imageCharged": true,
+      "rigTask": "01a1f86a-b6c6-721d-bc87-d2f2ec72d83f",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "professor": {
+      "imageTask": "01a1f86a-f8c1-75d0-adaf-043eb38cafd1",
+      "imageCharged": true,
+      "rigTask": "01a1f86c-2a3c-7788-801e-13ba773cf5cc",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "punk": {
+      "imageTask": "01a1f86c-7f13-7008-a2cb-0cec62f85d82",
+      "imageCharged": true,
+      "rigTask": "01a1f86d-73ed-7238-8aa4-332ef1d6f3ed",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "runner": {
+      "imageTask": "01a1f86d-c89f-72e9-96aa-eca5142d6019",
+      "imageCharged": true,
+      "rigTask": "01a1f86e-aa8a-70b0-9037-9886efaa5028",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "skater": {
+      "imageTask": "01a1f86e-ec5a-737a-8852-3ea018e30aaf",
+      "imageCharged": true,
+      "rigTask": "01a1f86f-e36c-7054-9cf1-1696cb3cde7b",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "teamleader-cozy": {
+      "imageTask": "01a1f870-24a1-7142-a062-57522e49e2e1",
+      "imageCharged": true,
+      "rigTask": "01a1f871-57c4-752a-9b7f-7f66ce315812",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "web-raincoat": {
+      "imageTask": "01a1f871-98ea-714f-9f5b-dc716be864d2",
+      "imageCharged": true,
+      "rigTask": "01a1f873-7396-70d6-91be-2507f2c2f465",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "windows-knit": {
+      "imageTask": "01a1f873-c7df-71ea-bb66-796a1d2f0c54",
+      "imageCharged": true,
+      "rigTask": "01a1f874-e746-77d2-9e40-bbf47573e66b",
+      "rigCharged": true,
+      "rigged": true
     }
   },
   "clips": {
@@ -327,7 +439,7 @@
       "file": "library/characters/_clips/test_phones.glb"
     }
   },
-  "spent": 1541,
+  "spent": 2221,
   "props": {
     "office_chair": {
       "preview": "01a1effc-9838-725b-bb6c-e5fec573eb74",
@@ -557,6 +669,64 @@
       "preview": "01a1f04e-2768-72de-aca0-52c81289b0cf",
       "previewCharged": true,
       "refine": "01a1f04e-d935-7344-ab90-c7b6efc026e0",
+      "refineCharged": true,
+      "done": true
+    }
+  },
+  "accessories": {
+    "cap": {
+      "preview": "01a1f856-86c5-71db-8fb2-9f791bcd2f69",
+      "previewCharged": true,
+      "refine": "01a1f856-b9cf-70d1-846e-3064d5916555",
+      "refineCharged": true,
+      "done": true
+    },
+    "beanie": {
+      "preview": "01a1f857-44d3-7262-8117-2adb26724866",
+      "previewCharged": true,
+      "refine": "01a1f857-78ae-70f1-889d-f2463daae80c",
+      "refineCharged": true,
+      "done": true
+    },
+    "buckethat": {
+      "preview": "01a1f857-fdbc-7307-9d75-3f1a7d2d8691",
+      "previewCharged": true,
+      "refine": "01a1f858-3199-72b4-b267-89e6183e90f1",
+      "refineCharged": true,
+      "done": true
+    },
+    "headphones": {
+      "preview": "01a1f858-b814-77d3-b95c-b1506e434955",
+      "previewCharged": true,
+      "refine": "01a1f858-eba9-7058-a825-05ceffa21fe0",
+      "refineCharged": true,
+      "done": true
+    },
+    "headset": {
+      "preview": "01a1f859-99db-72ad-a927-dd0baa262c5e",
+      "previewCharged": true,
+      "refine": "01a1f859-ce85-73bc-9637-be19378f9c6b",
+      "refineCharged": true,
+      "done": true
+    },
+    "glasses": {
+      "preview": "01a1f85a-56ae-72bf-b162-3c535364097e",
+      "previewCharged": true,
+      "refine": "01a1f85a-9f46-711d-a1bb-48d74f8cd78e",
+      "refineCharged": true,
+      "done": true
+    },
+    "backpack": {
+      "preview": "01a1f85b-1111-776c-8e6e-6da83295ecb7",
+      "previewCharged": true,
+      "refine": "01a1f85b-4537-76c9-809f-cd438978feae",
+      "refineCharged": true,
+      "done": true
+    },
+    "lanyard": {
+      "preview": "01a1f85b-cbea-710a-aeed-effe04f6fd6e",
+      "previewCharged": true,
+      "refine": "01a1f85c-011e-7416-8905-8363b990250f",
       "refineCharged": true,
       "done": true
     }

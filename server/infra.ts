@@ -8,7 +8,7 @@ import { openTerminal } from './terminal.ts';
 import { readSecret } from './secrets.ts';
 import { CLAUDE_BIN, TEAMS_DIR, expandHome } from './config.ts';
 import { claudeEnv } from './claude-run.ts';
-import { getTeam } from './roles.ts';
+import { cleanDevApps, getTeam } from './roles.ts';
 import { saveTeamSettings } from './project.ts';
 import { bus } from './bus.ts';
 import type { InfraConfig, InfraItem, InfraMonitor, MonitorConfig, Team } from './roles.ts';
@@ -509,29 +509,7 @@ Använd en egen az-profil per projekt (~/.azure-<projekt>), aldrig den delade ~/
     '--disallowedTools', 'Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Agent',
     '--add-dir', ...team.repos.map((r) => r.path), notesDir, ...(memoryDir ? [memoryDir] : []),
   ];
-  const answer = await new Promise<{ items: unknown[]; summary: string } | null>((resolve) => {
-    const child = spawn(CLAUDE_BIN, args, { cwd: team.repo, env: claudeEnv(team.account, 0), stdio: ['pipe', 'pipe', 'pipe'] });
-    let out = '';
-    child.stdout.on('data', (c: Buffer) => {
-      out += c.toString();
-      if (process.env.INFRA_DEBUG) process.stderr.write(c);
-    });
-    const timer = setTimeout(() => child.kill(), 6 * 60_000);
-    child.on('error', () => resolve(null));
-    child.on('close', () => {
-      clearTimeout(timer);
-      try {
-        // stream-json when debugging: the result is the last line.
-        const last = out.trim().split('\n').filter((l) => l.includes('"type":"result"')).at(-1) ?? out;
-        const msg = JSON.parse(last) as { structured_output?: { items: unknown[]; summary: string }; result?: string; is_error?: boolean };
-        if (msg.is_error) return resolve(null);
-        resolve(msg.structured_output ?? JSON.parse(String(msg.result)));
-      } catch {
-        resolve(null);
-      }
-    });
-    child.stdin.end(prompt);
-  });
+  const answer = await askReader<{ items: unknown[]; summary: string }>(team, prompt, args);
   if (!answer) return { added: [], changed: [], removed: [], summary: 'Agenten gav inget svar. Listan är oförändrad.', ok: false };
 
   const proposed = cleanItems(answer.items);
@@ -548,6 +526,117 @@ Använd en egen az-profil per projekt (~/.azure-<projekt>), aldrig den delade ~/
   return { added, changed, removed, summary: answer.summary, ok: true };
 }
 
+/** One read-only Claude run with a JSON answer: the prompt on stdin, the structured output back. */
+function askReader<T>(team: Team, prompt: string, args: string[]): Promise<T | null> {
+  return new Promise<T | null>((resolve) => {
+    const child = spawn(CLAUDE_BIN, args, { cwd: team.repo, env: claudeEnv(team.account, 0), stdio: ['pipe', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout.on('data', (c: Buffer) => {
+      out += c.toString();
+      if (process.env.INFRA_DEBUG) process.stderr.write(c);
+    });
+    const timer = setTimeout(() => child.kill(), 6 * 60_000);
+    child.on('error', () => resolve(null));
+    child.on('close', () => {
+      clearTimeout(timer);
+      try {
+        // stream-json when debugging: the result is the last line.
+        const last = out.trim().split('\n').filter((l) => l.includes('"type":"result"')).at(-1) ?? out;
+        const msg = JSON.parse(last) as { structured_output?: T; result?: string; is_error?: boolean };
+        if (msg.is_error) return resolve(null);
+        resolve(msg.structured_output ?? (JSON.parse(String(msg.result)) as T));
+      } catch {
+        resolve(null);
+      }
+    });
+    child.stdin.end(prompt);
+  });
+}
+
+// ---------------------------------------------------------------- local apps
+
+const APP = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string', description: 'Kort id, gemener, t.ex. portal, web, api.' },
+    label: { type: 'string', description: 'Appens namn som folk säger det, t.ex. "Portal Internal".' },
+    repo: { type: 'string', description: 'Repots id.' },
+    dir: { type: 'string', description: 'Mappen i repot där kommandot körs; tom sträng för roten.' },
+    command: { type: 'string', description: 'Startar appen i förgrunden tills den stoppas, som projektets folk gör det.' },
+    url: { type: 'string', description: 'Adressen man öppnar, t.ex. https://localhost:2222.' },
+    ports: { type: 'array', items: { type: 'number' } },
+    notes: { type: 'string', description: 'För agenterna: inloggning, testanvändare, vad som krävs (Docker, en databas).' },
+    source: { type: 'string' },
+  },
+  required: ['id', 'label', 'repo', 'dir', 'command', 'url', 'ports', 'notes'],
+};
+const APPS_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    apps: { type: 'array', items: APP },
+    summary: { type: 'string', description: 'En eller två meningar på svenska: vilka appar du hittade och vad som är osäkert.' },
+  },
+  required: ['apps', 'summary'],
+};
+
+/**
+ * An agent reads the repos the way a new developer would (README, package.json
+ * scripts, launchSettings, docker-compose, the project's memory) and lists the
+ * apps people start locally while they work, with the command they use. With
+ * an instruction it does what the owner wrote; without one it only adds.
+ */
+export async function askDevApps(team: Team, instruction: string): Promise<InfraAnswer> {
+  const notesDir = join(TEAMS_DIR, team.id, 'notes');
+  const runDir = join(TEAMS_DIR, team.id, 'run');
+  const memoryDir = team.memory ? dirname(team.memory) : null;
+  const current = team.devApps;
+  const prompt = `Du tar reda på hur projektet ${team.name} körs lokalt när man utvecklar: de appar man startar på sin dator (en webbapp, en backend, ett API, en dev-server) och exakt hur projektets folk startar dem. Läs med Read, Glob och Grep; ändra inga filer och kör inga kommandon.
+
+${instruction.trim() ? `Ägaren skriver:\n"""\n${instruction.trim()}\n"""\nGör det. Lämna resten av listan som den är.` : 'Lägg till de appar som saknas i listan. Ändra inte det som redan finns, om det inte är fel enligt en källa.'}
+
+Listan nu (JSON):
+${JSON.stringify(current, null, 1)}
+
+Källor:
+- Repo${team.repos.length > 1 ? 'na' : 't'} (id: sökväg): ${team.repos.map((r) => `${r.id}: ${r.path}`).join(', ')}. Läs README, CLAUDE.md, docs, package.json-skript (dev, start, serve), Properties/launchSettings.json, docker-compose, Procfile, Makefile, .vscode/launch.json.
+${memoryDir ? `- Projektets Claude-minne: ${memoryDir} (MEMORY.md först).\n` : ''}- Rollernas anteckningar: ${notesDir}
+- Startskript ägaren redan har: ${runDir} (finns de, använd dem: command blir t.ex. "\$CR_RUN/portal.sh serve").
+
+En post per app som man kör lokalt och tittar på eller anropar, inte byggsteg, tester eller bibliotek:
+- command: det man skriver i terminalen för att starta den, i förgrunden (t.ex. "pnpm run dev", "dotnet watch run --launch-profile dev", "npm start"). Det körs med zsh i dir och stoppas med SIGTERM. Startar ett kommando flera delar (backend och frontend samtidigt), är det en app. Miljövariabler som finns: CR_ROOT (checkouten den körs från, ägarens eller ett korts worktree), CR_CARD (kortets nummer, tomt för ägaren), CR_RUN (${runDir}).
+- url: adressen man öppnar i webbläsaren eller anropar; ports: alla portar den lyssnar på (från launchSettings, vite.config, .env).
+- notes: det en agent behöver för att använda den: inloggning (t.ex. Entra/SSO i webbläsaren), testanvändare, vad som måste vara igång (Docker, SQL Server, Azurite).
+Gissa aldrig en port eller ett kommando: står det inte i en källa, skriv det i summary.`;
+  const args = [
+    '-p',
+    '--model', 'sonnet',
+    '--effort', 'low',
+    '--max-turns', '30',
+    '--output-format', process.env.INFRA_DEBUG ? 'stream-json' : 'json',
+    ...(process.env.INFRA_DEBUG ? ['--verbose'] : []),
+    '--json-schema', JSON.stringify(APPS_SCHEMA),
+    '--strict-mcp-config',
+    '--allowedTools', 'Read', 'Glob', 'Grep',
+    '--disallowedTools', 'Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Agent',
+    '--add-dir', ...team.repos.map((r) => r.path), notesDir, ...(existsSync(runDir) ? [runDir] : []), ...(memoryDir ? [memoryDir] : []),
+  ];
+  const answer = await askReader<{ apps: unknown[]; summary: string }>(team, prompt, args);
+  if (!answer) return { added: [], changed: [], removed: [], summary: 'Agenten gav inget svar. Listan är oförändrad.', ok: false };
+  const repoIds = new Set(team.repos.map((r) => r.id));
+  const proposed = cleanDevApps(answer.apps).map((a) => ({ ...a, repo: repoIds.has(a.repo) ? a.repo : team.repos[0].id }));
+  const before = new Map(current.map((a) => [a.id, a]));
+  // keepRunning is the owner's choice: an agent's list never changes it.
+  const next = (instruction.trim() ? proposed : [...current, ...proposed.filter((a) => !before.has(a.id))]).map((a) => ({ ...a, keepRunning: before.get(a.id)?.keepRunning ?? false }));
+  const after = new Map(next.map((a) => [a.id, a]));
+  const added = next.filter((a) => !before.has(a.id)).map((a) => a.label);
+  const changed = next.filter((a) => before.has(a.id) && JSON.stringify(before.get(a.id)) !== JSON.stringify(a)).map((a) => a.label);
+  const removed = current.filter((a) => !after.has(a.id)).map((a) => a.label);
+  if (added.length || changed.length || removed.length) saveTeamSettings(team.id, { devApps: next });
+  return { added, changed, removed, summary: answer.summary, ok: true };
+}
+
 /** A new project: its list filled in the background, and the board told when it is done. */
 export function setUpNewProject(teamId: string) {
   const team = getTeam(teamId);
@@ -558,4 +647,11 @@ export function setUpNewProject(teamId: string) {
       bus.emit({ type: 'teams' });
     })
     .catch((err) => console.warn(`[infra] ${teamId}: ${(err as Error).message}`));
+  // How it runs locally: a button per app on the board.
+  void askDevApps(team, '')
+    .then((r) => {
+      console.log(`[appar] ${teamId}: ${r.added.join(' · ') || r.summary}`);
+      bus.emit({ type: 'teams' });
+    })
+    .catch((err) => console.warn(`[appar] ${teamId}: ${(err as Error).message}`));
 }

@@ -14,6 +14,7 @@ const GODFATHER: Role = {
   kind: 'lead',
   vibe: '',
   name: 'Gudfadern',
+  nick: '',
   title: '',
   model: '',
   wakeModel: '',

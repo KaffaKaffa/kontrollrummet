@@ -2,6 +2,8 @@ import { EventEmitter } from 'node:events';
 import type { AgentEvent, ConvEvent, Conversation, Notice, Plan, Subtask, Task } from './db.ts';
 import type { Usage } from './usage.ts';
 import type { Job } from './deploy.ts';
+import type { DevAppView } from './devapps.ts';
+import type { OwnPr } from './git.ts';
 
 export interface Approval {
   id: string;
@@ -22,6 +24,7 @@ export type Broadcast =
   | { type: 'subtask'; subtask: Subtask }
   | { type: 'event'; event: AgentEvent }
   | { type: 'notice'; notice: Notice }
+  | { type: 'own-prs'; team: string; prs: (OwnPr & { repo: string })[] }
   | { type: 'plan'; plan: Plan }
   | { type: 'usage'; account: string; usage: Usage }
   | { type: 'job'; job: Job }
@@ -30,6 +33,10 @@ export type Broadcast =
   | { type: 'conversation'; conversation: Conversation }
   | { type: 'conv-event'; event: ConvEvent }
   | { type: 'restart'; waitingFor: number | null }
+  /** A project's local apps: started, stopped, someone waiting. */
+  | { type: 'devapps'; team: string; apps: DevAppView[] }
+  /** New output from a local app, for its open window. */
+  | { type: 'devapp-log'; key: string; text: string }
   /** A project's files changed (an agent added, a logo): the page reloads the teams. */
   | { type: 'teams' };
 

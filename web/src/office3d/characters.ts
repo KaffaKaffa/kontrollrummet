@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { Role } from '../api.ts';
 
 /**
@@ -42,16 +43,73 @@ const PREVIEW = new URLSearchParams(location.search).get('gubbe');
 
 export function characterOf(role: Role): string {
   if (PREVIEW) return PREVIEW;
-  if (role.character) return role.character;
+  return role.character || defaultCharacter(role);
+}
+
+/** The character a role has when none is chosen: the template with its id, else the one of its kind. */
+export function defaultCharacter(role: Pick<Role, 'id' | 'kind'>): string {
   if (STYLES[role.id]) return role.id;
-  // A role with its own id: the template of its kind.
   return { lead: 'teamleader', architect: 'architect', bug: 'bug', tester: 'tester', designer: 'designer', app: 'fullstack' }[role.kind];
 }
 
-export function styleOf(role: Role): Style {
-  return STYLES[characterOf(role)] ?? STYLES.fullstack;
+/**
+ * The template whose workstation a role sits at: what it does, not what it
+ * wears. A character from the wardrobe keeps the role's own.
+ */
+export function jobOf(role: Role): string {
+  return role.character && STYLES[role.character] ? role.character : defaultCharacter(role);
 }
+
+export function styleOf(role: Role): Style {
+  const c = characterOf(role);
+  return STYLES[c] ?? extraStyles.get(c) ?? STYLES.fullstack;
+}
+
+/** One pick in the wardrobe: a template's character or one of library/characters/wardrobe.json. */
+export interface WardrobeCharacter {
+  id: string;
+  label: string;
+  /** Same person as this template, in other clothes. */
+  base?: string;
+  /** Has a 3D model; without one it is drawn as clay. */
+  built: boolean;
+  style?: Style;
+}
+
+export interface Wardrobe {
+  characters: WardrobeCharacter[];
+}
+
+const extraStyles = new Map<string, Style>();
+let wardrobe: Promise<Wardrobe> | null = null;
+
+/** What there is to pick from; scripts/characters.mjs build writes it. */
+export function loadWardrobe(): Promise<Wardrobe> {
+  wardrobe ??= fetch('/characters/wardrobe.json')
+    .then((r) => (r.headers.get('content-type')?.includes('json') ? r.json() : { characters: [] }))
+    .then((w: Wardrobe) => {
+      for (const c of w.characters) if (c.style && !STYLES[c.id]) extraStyles.set(c.id, c.style);
+      return w;
+    })
+    .catch(() => ({ characters: [] }));
+  return wardrobe;
+}
+
+/** The wardrobe's portrait of a character, for the picker. */
+export const portraitUrl = (character: string) => `/characters/portraits/${character}.png`;
 
 /** The 3D model, once Meshy has made it (scripts/characters.mjs). */
 export const modelUrl = (character: string) => `/characters/${character}.glb`;
 export const ANIMATIONS_URL = '/characters/animations.glb';
+
+export function useWardrobe(): Wardrobe | null {
+  const [w, setW] = useState<Wardrobe | null>(null);
+  useEffect(() => {
+    let live = true;
+    void loadWardrobe().then((x) => live && setW(x));
+    return () => {
+      live = false;
+    };
+  }, []);
+  return w;
+}

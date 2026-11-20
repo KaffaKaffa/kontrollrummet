@@ -112,7 +112,17 @@ function PropMesh({ prop }: { prop: Prop }) {
   }
 }
 
-export function ModelCharacter({ character, agent, onClick, onHover }: { character: string; agent: () => Agent; onClick: () => void; onHover: (on: boolean) => void }) {
+export function ModelCharacter({
+  character,
+  agent,
+  onClick,
+  onHover,
+}: {
+  character: string;
+  agent: () => Agent;
+  onClick: () => void;
+  onHover: (on: boolean) => void;
+}) {
   const model = useGLTF(modelUrl(character));
   const anims = useGLTF(ANIMATIONS_URL);
   // Each person gets their own copy of the model and its skeleton.

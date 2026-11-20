@@ -6,6 +6,9 @@
 //   node scripts/avatars.mjs --body           helkroppsbild i A-pose per mall, förlaga till 3D-gubben
 //   node scripts/avatars.mjs --sync           kopiera bibliotekets porträtt till teamens roller med samma gubbe
 //   node scripts/avatars.mjs --prompts        skriv bara ut promptarna
+//   node scripts/avatars.mjs --consultants    porträtt till konsultmallarna (library/consultants), de som saknas
+//   node scripts/avatars.mjs --wardrobe       porträtt och helkroppsbild till garderobens gubbar
+//                                             (library/characters/wardrobe.json); kör sedan characters.mjs models
 //
 // Gubbarna finns i biblioteket (library/roles), en per mall:
 //   library/avatars/<id>.png            porträttet (384 px)
@@ -31,6 +34,8 @@ const force = args.includes('--force');
 const printOnly = args.includes('--prompts');
 const body = args.includes('--body');
 const sync = args.includes('--sync');
+const wardrobeMode = args.includes('--wardrobe');
+const consultantsMode = args.includes('--consultants');
 const only = args.filter((a) => !a.startsWith('--'));
 
 const key =
@@ -124,10 +129,88 @@ async function edit(prompt, reference, size) {
 }
 
 const want = (id) => !only.length || only.includes(id);
+
+/**
+ * The wardrobe: a new person from its `look`, or a template's person in
+ * another `outfit`, made from the template's portrait so the face stays.
+ */
+async function wardrobe() {
+  const list = JSON.parse(readFileSync(join(libCharacters, 'wardrobe.json'), 'utf8')).characters;
+  for (const c of list.filter((x) => want(x.id))) {
+    const portrait = join(libAvatars, `${c.id}.png`);
+    const bodyFile = join(libCharacters, c.id, 'body.png');
+    const prompts = c.base
+      ? {
+          portrait: `${PORTRAIT}\n\nExactly the same character as in the reference image: same face, hair, skin tone, build, age and expression, same clay style, same framing. Only the clothes change. Now wearing: ${c.outfit}.`,
+          body: `${BODY.replace('same face, hair, skin tone, build and clothes', 'same face, hair, skin tone, build and clothes as in the reference')}\n\nThe character wears: ${c.outfit}.`,
+        }
+      : { portrait: `${PORTRAIT}\n\nThe character works in a software team office. Looks: ${c.look}`, body: bodyPrompt(c) };
+    if (printOnly) {
+      console.log(`\n## ${c.id}\n${prompts.portrait}\n\n${prompts.body}`);
+      continue;
+    }
+    try {
+      if (!existsSync(portrait) || force) {
+        process.stdout.write(`${c.id} (porträtt) … `);
+        const from = c.base ? join(libAvatars, `${c.base}.png`) : null;
+        if (from && !existsSync(from)) throw new Error(`mallens porträtt ${c.base} saknas`);
+        writeFileSync(portrait, from ? await edit(prompts.portrait, from, '1024x1024') : await generate(prompts.portrait, '1024x1024'));
+        // The body is drawn from the big one; the portrait is kept small after.
+        console.log('klar');
+      }
+      if (!existsSync(bodyFile) || force) {
+        process.stdout.write(`${c.id} (kropp) … `);
+        mkdirSync(join(libCharacters, c.id), { recursive: true });
+        writeFileSync(bodyFile, await edit(prompts.body, portrait, '1024x1536'));
+        console.log('klar');
+      }
+      execFileSync('sips', ['-Z', '384', portrait], { stdio: 'ignore' });
+    } catch (err) {
+      console.log(`fel: ${err.message}`);
+    }
+  }
+}
+/** The consultant templates' faces: library/avatars/consultant-<id>.png, in the agents' clay style. */
+async function consultantFaces() {
+  const dir = join(root, 'library/consultants');
+  for (const f of readdirSync(dir).filter((x) => x.endsWith('.md'))) {
+    const id = f.slice(0, -3);
+    if (!want(id)) continue;
+    const m = frontMatter(join(dir, f));
+    const out = join(libAvatars, `consultant-${id}.png`);
+    const prompt = `${PORTRAIT}\n\nThe character is a consultant a software team calls in (in Swedish: "${m.name}: ${m.title}"). Looks: ${m.look} Personality, in Swedish: ${m.vibe ?? ''}`;
+    if (printOnly) {
+      console.log(`\n## ${id}\n${prompt}`);
+      continue;
+    }
+    if (existsSync(out) && !force) continue;
+    try {
+      process.stdout.write(`${id} … `);
+      writeFileSync(out, await generate(prompt, '1024x1024'));
+      execFileSync('sips', ['-Z', '384', out], { stdio: 'ignore' });
+      console.log('klar');
+    } catch (err) {
+      console.log(`fel: ${err.message}`);
+    }
+  }
+}
+
 const lib = templates();
 const roles = teamRoles(lib);
 mkdirSync(libAvatars, { recursive: true });
 mkdirSync(teamAvatars, { recursive: true });
+
+if (consultantsMode) {
+  if (!printOnly && !key) throw new Error('OPENAI_API_KEY saknas och finns inte i nyckelringen (control-room-openai).');
+  await consultantFaces();
+  process.exit(0);
+}
+
+if (wardrobeMode) {
+  if (!printOnly && !key) throw new Error('OPENAI_API_KEY saknas och finns inte i nyckelringen (control-room-openai).');
+  await wardrobe();
+  process.exit(0);
+}
 
 if (printOnly) {
   for (const t of lib.filter((x) => want(x.id))) console.log(`\n## ${t.id}\n${body ? bodyPrompt(t) : portraitPrompt(t)}`);

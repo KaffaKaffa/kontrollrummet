@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Linked } from './links.tsx';
-import { avatarUrl, post, type AgentEvent, type Approval, type Role, type Subtask, type SubtaskStatus } from './api.ts';
+import { avatarUrl, awaitsReview, nameOf, post, reviewText, type AgentEvent, type Approval, type Role, type Subtask, type SubtaskStatus } from './api.ts';
 
 export const STATUS_LABEL: Record<SubtaskStatus, string> = {
   queued: 'I kö',
@@ -14,10 +14,13 @@ export const STATUS_LABEL: Record<SubtaskStatus, string> = {
   failed: 'Gick inte',
 };
 
-/** A status as the board shows it: `merge-wait` is a watcher whose open cards only wait for a merge. */
-export type Shown = SubtaskStatus | 'merge-wait';
+/**
+ * A status as the board shows it: `merge-wait` is a watcher whose open cards only wait for a merge,
+ * `review-wait` an open PR that waits for someone else's approval.
+ */
+export type Shown = SubtaskStatus | 'merge-wait' | 'review-wait';
 
-const SHOWN_LABEL: Record<Shown, string> = { ...STATUS_LABEL, 'merge-wait': 'Väntar på merge' };
+const SHOWN_LABEL: Record<Shown, string> = { ...STATUS_LABEL, 'merge-wait': 'Väntar på merge', 'review-wait': 'Granskas' };
 
 /**
  * What a card is really waiting for. A teamleader or bug card watches its
@@ -31,13 +34,14 @@ export function shownStatus(card: Subtask, all: Subtask[]): Shown {
 
 /** `idle`: a watcher with nothing open under it, which holds nothing up. */
 function settle(card: Subtask, all: Subtask[]): Shown | 'idle' {
+  if (awaitsReview(card)) return 'review-wait';
   if (card.status !== 'watching') return card.status;
   const open = all
     .filter((c) => c.parentId === card.id && c.id !== card.id)
     .map((c) => settle(c, all))
     .filter((st) => st !== 'done' && st !== 'failed' && st !== 'idle');
   if (!open.length) return 'idle';
-  return open.every((st) => st === 'pr-open' || st === 'merge-wait') ? 'merge-wait' : 'watching';
+  return open.every((st) => st === 'pr-open' || st === 'merge-wait' || st === 'review-wait') ? 'merge-wait' : 'watching';
 }
 
 export function StatusBadge({ status }: { status: Shown }) {
@@ -96,11 +100,11 @@ export function Avatar({
   status?: Shown;
 }) {
   const [broken, setBroken] = useState(false);
-  const name = role?.name ?? '?';
+  const name = nameOf(role) ?? '?';
   return (
     <span className={`avatar avatar-${size} ${status ? `ring-${status}` : ''}`} title={name}>
       {role && !broken ? (
-        <img src={avatarUrl(team, role.id)} alt="" onError={() => setBroken(true)} />
+        <img src={avatarUrl(team, role)} alt="" onError={() => setBroken(true)} />
       ) : (
         <span aria-hidden="true">{name.slice(0, 2)}</span>
       )}
@@ -141,7 +145,7 @@ export function CardRow({
       <Avatar team={team} role={role} size="sm" status={shown} />
       <span className="card-row-main">
         <span className="card-row-agent">
-          {role?.name ?? subtask.agent} · #{subtask.id}
+          {nameOf(role) ?? subtask.agent} · #{subtask.id}
         </span>
         <span className="card-row-brief">{subtask.brief.split('\n')[0]}</span>
       </span>
@@ -150,7 +154,13 @@ export function CardRow({
         {subtask.dependsOn.length > 0 && subtask.status === 'queued' && (
           <span className="num">väntar på {subtask.dependsOn.map((d) => `#${d}`).join(' ')}</span>
         )}
-        <StatusBadge status={shown} />
+        {awaitsReview(subtask) ? (
+          <span className="badge badge-review-wait" title={reviewText(subtask)}>
+            {reviewText(subtask, { short: true })}
+          </span>
+        ) : (
+          <StatusBadge status={shown} />
+        )}
       </span>
     </button>
   );
@@ -425,7 +435,7 @@ export function ApprovalCard({ approval, role, team }: { approval: Approval; rol
       <Avatar team={team} role={role} size="sm" />
       <div className="approval-main">
         <p>
-          <strong>{role?.name ?? (approval.conversationId ? 'Gudfadern' : 'En agent')}</strong> vill köra <code>{approval.tool}</code>
+          <strong>{nameOf(role) ?? (approval.conversationId ? 'Gudfadern' : 'En agent')}</strong> vill köra <code>{approval.tool}</code>
           {approval.subtaskId != null ? (
             <>
               {' '}
@@ -554,7 +564,7 @@ export function CardDetail({
               </>
             )}
           </p>
-          <h2>{role?.name ?? subtask.agent}</h2>
+          <h2>{nameOf(role) ?? subtask.agent}</h2>
           <StatusBadge status={shown} />
         </div>
         {onClose && (
@@ -588,7 +598,7 @@ export function CardDetail({
       <LoginPrompt subtask={subtask} owner={owner} />
       <Composer
         rows={2}
-        placeholder={`Skriv till ${role?.name ?? 'agenten'}…`}
+        placeholder={`Skriv till ${nameOf(role) ?? 'agenten'}…`}
         submitLabel="Skicka"
         onUpload={uploadTo(`/api/subtasks/${subtask.id}/upload`)}
         onSubmit={(text, files) => post(`/api/subtasks/${subtask.id}/messages`, { text, images: files.flatMap((f) => (f.url && f.preview ? [f.url] : [])) })}

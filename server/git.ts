@@ -2,6 +2,7 @@ import { execFile } from './proc.ts';
 import { promisify } from 'node:util';
 import { identityEnv, type Identity } from './accounts.ts';
 import { hostOf, type GitHost } from './scan.ts';
+import type { PrReview } from './db.ts';
 
 const run = promisify(execFile);
 
@@ -15,6 +16,8 @@ export interface PrState {
   state: 'OPEN' | 'MERGED' | 'CLOSED';
   /** MERGEABLE, CONFLICTING or UNKNOWN. */
   mergeable: string;
+  /** Where it stands with its reviewers, by account (login or e-mail). */
+  review: PrReview;
 }
 
 /** An open PR waiting for the owner's review. */
@@ -23,6 +26,21 @@ export interface ReviewRequest {
   title: string;
   url: string;
   author: string;
+}
+
+/** A review, a comment or an inline comment on a PR, from a person or a bot (Copilot). */
+export interface PrFeedback {
+  id: string;
+  author: string;
+  /** ISO time it was written. */
+  at: string;
+  /** APPROVED, CHANGES_REQUESTED, COMMENTED for a review; empty for a comment. */
+  state: string;
+  /** File and line for an inline comment. */
+  where: string;
+  body: string;
+  /** The thread it answers, when it is a reply. */
+  reply: boolean;
 }
 
 export interface GitProvider {
@@ -42,6 +60,10 @@ export interface GitProvider {
    * not yet voted: as the signed-in account, or as any identity in `me`.
    */
   reviewRequests(repo: string, account: Identity, me: string[]): Promise<ReviewRequest[]>;
+  /** Open, non-draft PRs created by the signed-in account. */
+  ownPrs(repo: string, account: Identity): Promise<OwnPr[]>;
+  /** Reviews and comments on a PR, oldest first. */
+  prFeedback(prUrl: string, repo: string, account: Identity): Promise<PrFeedback[]>;
   /** Signed in, and as whom; null when not. */
   whoami(account: Identity): Promise<string | null>;
   loginCommand: string;
@@ -49,6 +71,48 @@ export interface GitProvider {
   canPush(repo: string, account: Identity): Promise<boolean>;
   /** A new, empty repo; returns its clone URL. */
   createRepo(opts: { name: string; owner: string; project?: string; private: boolean }, account: Identity): Promise<string>;
+}
+
+/** An open PR of the owner's own that no card holds: theirs to merge. */
+export interface OwnPr {
+  number: number;
+  title: string;
+  url: string;
+  review: PrReview;
+}
+
+type GhReviewFields = {
+  reviewDecision: string;
+  /** BLOCKED when branch protection or a ruleset holds the merge back. */
+  mergeStateStatus?: string;
+  reviewRequests: { login?: string; name?: string; slug?: string }[];
+  latestReviews: { author: { login: string } | null; state: string }[];
+};
+
+/** Where a GitHub PR stands with its reviewers. A requested reviewer drops off the list once they have reviewed. */
+function ghReview(pr: GhReviewFields): PrReview {
+  const by = (st: string) => pr.latestReviews.filter((r) => r.state === st && r.author).map((r) => r.author!.login);
+  const asked = pr.reviewRequests.map((r) => r.login ?? r.name ?? r.slug ?? '').filter(Boolean);
+  if (pr.reviewDecision === 'CHANGES_REQUESTED' || by('CHANGES_REQUESTED').length) return { state: 'changes', who: by('CHANGES_REQUESTED') };
+  // A requested review only holds the PR up when GitHub says a review is required, or the merge is blocked.
+  if (pr.reviewDecision === 'REVIEW_REQUIRED' || (asked.length && pr.mergeStateStatus === 'BLOCKED')) return { state: 'waiting', who: asked };
+  if (pr.reviewDecision === 'APPROVED' || by('APPROVED').length) return { state: 'approved', who: by('APPROVED') };
+  return { state: 'none', who: [] };
+}
+
+type AzReviewer = { uniqueName: string; displayName: string; vote: number; isRequired?: boolean; isContainer?: boolean };
+
+/** Votes: 10 approved, 5 approved with suggestions, 0 none yet, -5 waiting for the author, -10 rejected. */
+function azReview(reviewers: AzReviewer[] | null | undefined, skip: Set<string> = new Set()): PrReview {
+  const people = (reviewers ?? []).map((r) => ({ ...r, who: r.uniqueName || r.displayName })).filter((r) => !skip.has(r.who.toLowerCase()));
+  const against = people.filter((r) => r.vote < 0).map((r) => r.who);
+  // Only required reviewers hold a PR up; an optional one who has not voted blocks nothing.
+  const pending = people.filter((r) => r.vote === 0 && r.isRequired).map((r) => r.who);
+  const approved = people.filter((r) => r.vote > 0).map((r) => r.who);
+  if (against.length) return { state: 'changes', who: against };
+  if (pending.length) return { state: 'waiting', who: pending };
+  if (approved.length) return { state: 'approved', who: approved };
+  return { state: 'none', who: [] };
 }
 
 type Env = NodeJS.ProcessEnv;
@@ -62,9 +126,9 @@ const github: GitProvider = {
   prUrl: /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/(\d+)/g,
   prHow: 'Öppna en PR mot basbranchen med `gh pr create`.',
   async prState(prUrl, repo, account) {
-    const out = await exec('gh', ['pr', 'view', prUrl, '--json', 'state,mergeable'], identityEnv(account), repo);
-    const { state, mergeable } = JSON.parse(out) as { state: string; mergeable: string };
-    return { state: state === 'MERGED' ? 'MERGED' : state === 'CLOSED' ? 'CLOSED' : 'OPEN', mergeable };
+    const out = await exec('gh', ['pr', 'view', prUrl, '--json', 'state,mergeable,mergeStateStatus,reviewDecision,reviewRequests,latestReviews'], identityEnv(account), repo);
+    const pr = JSON.parse(out) as GhReviewFields & { state: string; mergeable: string };
+    return { state: pr.state === 'MERGED' ? 'MERGED' : pr.state === 'CLOSED' ? 'CLOSED' : 'OPEN', mergeable: pr.mergeable, review: ghReview(pr) };
   },
   async mergedPrs(repo, base, account) {
     const out = await exec('gh', ['pr', 'list', '--state', 'merged', '--base', base, '--limit', '20', '--json', 'number,title,url,mergedAt,files'], identityEnv(account), repo);
@@ -85,6 +149,51 @@ const github: GitProvider = {
       for (const p of JSON.parse(out) as { number: number; title: string; url: string; author: { login: string } }[]) seen.set(p.url, { ...p, author: p.author.login });
     }
     return [...seen.values()];
+  },
+  async ownPrs(repo, account) {
+    const out = await exec(
+      'gh',
+      ['pr', 'list', '--author', '@me', '--state', 'open', '--limit', '50', '--json', 'number,title,url,isDraft,mergeStateStatus,reviewDecision,reviewRequests,latestReviews'],
+      identityEnv(account),
+      repo,
+    );
+    return (JSON.parse(out) as (GhReviewFields & { number: number; title: string; url: string; isDraft: boolean })[])
+      .filter((p) => !p.isDraft)
+      .map((p) => ({ number: p.number, title: p.title, url: p.url, review: ghReview(p) }));
+  },
+  async prFeedback(prUrl, repo, account) {
+    const m = /github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)/.exec(prUrl);
+    if (!m) throw new Error('ingen GitHub-PR i länken');
+    const env = identityEnv(account);
+    const view = JSON.parse(await exec('gh', ['pr', 'view', prUrl, '--json', 'reviews,comments'], env, repo)) as {
+      reviews: { id: string; author: { login: string } | null; body: string; state: string; submittedAt: string }[];
+      comments: { id: string; author: { login: string } | null; body: string; createdAt: string }[];
+    };
+    // Inline comments are not in gh pr view; the REST API has them.
+    const inline = JSON.parse(await exec('gh', ['api', '--paginate', `repos/${m[1]}/${m[2]}/pulls/${m[3]}/comments`], env, repo)) as {
+      id: number;
+      user: { login: string } | null;
+      body: string;
+      path: string;
+      line: number | null;
+      original_line: number | null;
+      created_at: string;
+      in_reply_to_id?: number;
+    }[];
+    const list: PrFeedback[] = [
+      ...view.reviews.map((r) => ({ id: `r${r.id}`, author: r.author?.login ?? 'ghost', at: r.submittedAt, state: r.state, where: '', body: r.body, reply: false })),
+      ...view.comments.map((c) => ({ id: `c${c.id}`, author: c.author?.login ?? 'ghost', at: c.createdAt, state: '', where: '', body: c.body, reply: false })),
+      ...inline.map((c) => ({
+        id: `i${c.id}`,
+        author: c.user?.login ?? 'ghost',
+        at: c.created_at,
+        state: '',
+        where: `${c.path}${c.line ?? c.original_line ? `:${c.line ?? c.original_line}` : ''}`,
+        body: c.body,
+        reply: Boolean(c.in_reply_to_id),
+      })),
+    ];
+    return list.sort((a, b) => a.at.localeCompare(b.at));
   },
   async whoami(account) {
     try {
@@ -134,11 +243,20 @@ const azure: GitProvider = {
     const id = /pullrequest\/(\d+)/.exec(prUrl)?.[1];
     if (!id) throw new Error('ingen PR i länken');
     const { org } = await azureRemote(repo);
-    const out = await exec('az', ['repos', 'pr', 'show', '--id', id, '--org', `https://dev.azure.com/${org}`, '--query', '{status: status, merge: mergeStatus}', '-o', 'json'], identityEnv(account), repo);
-    const { status, merge } = JSON.parse(out) as { status: string; merge: string };
+    const out = await exec(
+      'az',
+      ['repos', 'pr', 'show', '--id', id, '--org', `https://dev.azure.com/${org}`, '--query', '{status: status, merge: mergeStatus, reviewers: reviewers}', '-o', 'json'],
+      identityEnv(account),
+      repo,
+    );
+    const { status, merge, reviewers } = JSON.parse(out) as { status: string; merge: string; reviewers: AzReviewer[] | null };
+    // The owner (the agents' account) as reviewer of the PR is the owner's own click, not someone it waits for.
+    const me = (await this.whoami(account))?.toLowerCase();
+    const review = azReview(reviewers, new Set(me ? [me] : []));
     return {
       state: status === 'completed' ? 'MERGED' : status === 'abandoned' ? 'CLOSED' : 'OPEN',
       mergeable: merge === 'conflicts' ? 'CONFLICTING' : merge === 'succeeded' ? 'MERGEABLE' : 'UNKNOWN',
+      review,
     };
   },
   async mergedPrs(repo, base, account) {
@@ -186,14 +304,17 @@ const azure: GitProvider = {
       title: string;
       isDraft?: boolean;
       createdBy: { uniqueName: string; displayName: string };
-      reviewers: { uniqueName: string; vote: number }[];
+      reviewers: { uniqueName: string; vote: number; isRequired?: boolean }[];
     }[];
+    // Only what the owner holds up: a required reviewer with no vote yet (0). An optional one
+    // blocks nothing. Own PRs count too: an agent or a pipeline opens them in the owner's name,
+    // and a branch policy makes them review it before it goes in. Required through a group only
+    // is not seen here; cards' PRs are left out by the caller.
     return prs
-      .filter((p) => !p.isDraft && !mine.has(p.createdBy.uniqueName.toLowerCase()))
-      // Asked, and no vote yet (0). Required through a group only is not seen here.
+      .filter((p) => !p.isDraft)
       .filter((p) => {
         const votes = p.reviewers.filter((r) => mine.has(r.uniqueName.toLowerCase()));
-        return votes.length > 0 && votes.every((r) => r.vote === 0);
+        return votes.some((r) => r.isRequired) && votes.every((r) => r.vote === 0);
       })
       .map((p) => ({
         number: p.pullRequestId,
@@ -201,6 +322,57 @@ const azure: GitProvider = {
         url: `https://dev.azure.com/${org}/${encodeURIComponent(project)}/_git/${encodeURIComponent(name)}/pullrequest/${p.pullRequestId}`,
         author: p.createdBy.displayName,
       }));
+  },
+  async ownPrs(repo, account) {
+    const login = await this.whoami(account);
+    if (!login) throw new Error('inte inloggad i az');
+    const { org, project, repo: name } = await azureRemote(repo);
+    const out = await exec(
+      'az',
+      ['repos', 'pr', 'list', '--org', `https://dev.azure.com/${org}`, '--project', project, '--repository', name, '--status', 'active', '--creator', login, '--top', '100', '-o', 'json'],
+      identityEnv(account),
+      repo,
+    );
+    return (JSON.parse(out) as { pullRequestId: number; title: string; isDraft?: boolean; reviewers: AzReviewer[] | null }[])
+      .filter((p) => !p.isDraft)
+      .map((p) => ({
+        number: p.pullRequestId,
+        title: p.title,
+        url: `https://dev.azure.com/${org}/${encodeURIComponent(project)}/_git/${encodeURIComponent(name)}/pullrequest/${p.pullRequestId}`,
+        // The owner listed as reviewer of their own PR (a branch policy) is not someone it waits for.
+        review: azReview(p.reviewers, new Set([login.toLowerCase()])),
+      }));
+  },
+  async prFeedback(prUrl, repo, account) {
+    const id = /pullrequest\/(\d+)/.exec(prUrl)?.[1];
+    if (!id) throw new Error('ingen PR i länken');
+    const { org, project, repo: name } = await azureRemote(repo);
+    const out = await exec(
+      'az',
+      ['devops', 'invoke', '--area', 'git', '--resource', 'pullRequestThreads', '--org', `https://dev.azure.com/${org}`, '--route-parameters', `project=${project}`, `repositoryId=${name}`, `pullRequestId=${id}`, '--api-version', '7.1', '-o', 'json'],
+      identityEnv(account),
+      repo,
+    );
+    const threads = (JSON.parse(out) as {
+      value: {
+        id: number;
+        isDeleted?: boolean;
+        threadContext?: { filePath?: string; rightFileStart?: { line: number } } | null;
+        comments: { id: number; parentCommentId?: number; author: { uniqueName: string; displayName: string }; content?: string; publishedDate: string; commentType?: string; isDeleted?: boolean }[];
+      }[];
+    }).value;
+    const list: PrFeedback[] = [];
+    for (const t of threads) {
+      if (t.isDeleted) continue;
+      const file = t.threadContext?.filePath?.replace(/^\//, '');
+      const where = file ? `${file}${t.threadContext?.rightFileStart ? `:${t.threadContext.rightFileStart.line}` : ''}` : '';
+      for (const c of t.comments) {
+        // Votes, pushes and policy runs are system comments, not feedback.
+        if (c.isDeleted || c.commentType === 'system' || !c.content) continue;
+        list.push({ id: `${t.id}.${c.id}`, author: c.author.uniqueName || c.author.displayName, at: c.publishedDate, state: '', where, body: c.content, reply: Boolean(c.parentCommentId) });
+      }
+    }
+    return list.sort((a, b) => a.at.localeCompare(b.at));
   },
   async whoami(account) {
     try {
