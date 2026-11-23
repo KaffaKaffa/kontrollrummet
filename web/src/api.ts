@@ -193,6 +193,26 @@ export interface Approval {
   tool: string;
   summary: string;
   at: string;
+  /** Claude Code already said no on its own; a yes allows it on the card and runs it again. */
+  denied?: string;
+}
+
+/** One question to a consultant: who asked, its reasoning and searches, and the answer (server/consultations.ts). */
+export interface Consultation {
+  id: string;
+  team: string;
+  consultant: string;
+  subtaskId: number | null;
+  asker: string;
+  question: string;
+  status: 'running' | 'done' | 'failed';
+  thinking: string;
+  searches: string[];
+  sources: { url: string; title?: string }[];
+  answer: string;
+  error?: string;
+  startedAt: string;
+  endedAt: string | null;
 }
 
 export interface Notice {
@@ -304,6 +324,8 @@ interface ServerState {
   limits: { maxAgents: number; running: number };
   accounts: Account[];
   approvals: Approval[];
+  /** The latest questions to consultants, live while they are answered. */
+  consultations: Consultation[];
   notices: Notice[];
   locks: Record<string, number>;
   /** Per resource: cards sharing the holder's instance, and cards waiting in line. */
@@ -356,6 +378,7 @@ type Action =
   | { type: 'job'; job: Job }
   | { type: 'approval'; approval: Approval }
   | { type: 'approval-done'; id: string }
+  | { type: 'consultation'; consultation: Consultation }
   | { type: 'connected'; connected: boolean }
   | { type: 'conversation'; conversation: Conversation }
   | { type: 'conv-event'; event: ConvEvent }
@@ -373,6 +396,7 @@ const initial: Board = {
   limits: { maxAgents: 0, running: 0 },
   accounts: [],
   approvals: [],
+  consultations: [],
   notices: [],
   locks: {},
   lockQueues: {},
@@ -412,6 +436,7 @@ function reduce(board: Board, action: Action): Board {
         ...board,
         ...action.state,
         accounts: action.state.accounts ?? [],
+        consultations: action.state.consultations ?? [],
         conversations: action.state.conversations ?? [],
         devApps: action.state.devApps ?? {},
         ownPrs: action.state.ownPrs ?? {},
@@ -456,6 +481,10 @@ function reduce(board: Board, action: Action): Board {
       return { ...board, approvals: [...board.approvals, action.approval] };
     case 'approval-done':
       return { ...board, approvals: board.approvals.filter((a) => a.id !== action.id) };
+    case 'consultation': {
+      const others = board.consultations.filter((c) => c.id !== action.consultation.id);
+      return { ...board, consultations: [...others, action.consultation].slice(-200) };
+    }
     case 'conversation':
       return {
         ...board,

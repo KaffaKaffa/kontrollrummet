@@ -1,7 +1,7 @@
 import { Environment, Html, Lightformer, OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { EffectComposer, N8AO, SMAA, Vignette } from '@react-three/postprocessing';
-import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Component, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { avatarUrl, type Approval, type Role, type Subtask, type Task } from '../api.ts';
 import { Character } from './Character.tsx';
@@ -45,6 +45,37 @@ const DUTY_TEXT: Record<string, string> = {
   whiteboard: 'Planerar',
   free: 'Ledig',
 };
+
+/** Hidden longer than this (the Mac slept, the window was away): the scene is built again on return. */
+const STALE_HIDDEN_MS = 10 * 60 * 1000;
+
+/**
+ * The scene made again when the GPU lost it. After sleep, the Mac app's web view
+ * can lose the WebGL context; three.js gets it back, but the lighting baked once
+ * into the environment map does not come with it, and every desk and person
+ * turns black while the floor still shows. A new Canvas bakes it again. A long
+ * hidden spell counts too, since a lost context there is not always reported.
+ */
+function useFreshScene() {
+  const [key, setKey] = useState(0);
+  const hiddenAt = useRef<number | null>(null);
+  useEffect(() => {
+    const seen = () => {
+      if (document.hidden) hiddenAt.current = Date.now();
+      else if (hiddenAt.current && Date.now() - hiddenAt.current > STALE_HIDDEN_MS) setKey((k) => k + 1);
+      if (!document.hidden) hiddenAt.current = null;
+    };
+    document.addEventListener('visibilitychange', seen);
+    return () => document.removeEventListener('visibilitychange', seen);
+  }, []);
+  const onCreated = useCallback(({ gl }: { gl: THREE.WebGLRenderer }) => {
+    const canvas = gl.domElement;
+    // Without preventDefault the context is never given back.
+    canvas.addEventListener('webglcontextlost', (e) => e.preventDefault());
+    canvas.addEventListener('webglcontextrestored', () => setKey((k) => k + 1), { once: true });
+  }, []);
+  return { key, onCreated };
+}
 
 /** A day in the office: warm in the morning, bright at noon, golden in the evening, blue at night. */
 function daylight(hour: number) {
@@ -248,10 +279,18 @@ export default function Office3D(props: Office3DProps) {
 
   // The ball, from the game (paddle to paddle, into the net, past someone).
   const pingBall = () => director.game?.ball() ?? null;
+  const fresh = useFreshScene();
 
   return (
     <div className="office3d">
-      <Canvas shadows dpr={[1, 2]} camera={{ fov: 32, near: 0.1, far: 200 }} gl={{ antialias: false, toneMapping: THREE.ACESFilmicToneMapping }}>
+      <Canvas
+        key={fresh.key}
+        onCreated={fresh.onCreated}
+        shadows
+        dpr={[1, 2]}
+        camera={{ fov: 32, near: 0.1, far: 200 }}
+        gl={{ antialias: false, toneMapping: THREE.ACESFilmicToneMapping }}
+      >
         <color attach="background" args={['#f4ede4']} />
         <fog attach="fog" args={['#f4ede4', 30, 70]} />
         <FitCamera layout={layout} />

@@ -2,9 +2,12 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { bus, type Approval } from './bus.ts';
 import { OWNER, OWNERS } from './owner.ts';
+import { finishConsultation, progress, startConsultation } from './consultations.ts';
 import {
   addEvent,
   addNotice,
+  closeNotice,
+  listNotices,
   setTaskTitle,
   createSubtask,
   savePlan,
@@ -210,6 +213,7 @@ export function requestApproval(
   owner: { subtaskId: number | null; conversationId?: number; team: string },
   tool: string,
   input: unknown,
+  denied?: string,
 ): { approval: Approval; answer: Promise<{ allow: boolean; reason?: string }> } {
   const detail =
     input && typeof input === 'object'
@@ -221,9 +225,11 @@ export function requestApproval(
     tool,
     summary: detail.slice(0, 600),
     at: new Date().toISOString(),
+    ...(denied ? { denied } : {}),
   };
   const answer = new Promise<{ allow: boolean; reason?: string }>((resolve) => {
-    const timer = setTimeout(() => decideApproval(approval.id, false, 'Ingen svarade inom 30 minuter.'), APPROVAL_TIMEOUT);
+    // Nothing waits on a denial, so it stays until the owner has seen it.
+    const timer = denied ? undefined : setTimeout(() => decideApproval(approval.id, false, 'Ingen svarade inom 30 minuter.'), APPROVAL_TIMEOUT);
     pending.set(approval.id, {
       approval,
       resolve: (allow, reason) => {
@@ -234,6 +240,54 @@ export function requestApproval(
     bus.emit({ type: 'approval', approval });
   });
   return { approval, answer };
+}
+
+/**
+ * Claude Code said no to a card on its own, without asking: a NEVER rule or auto
+ * mode's classifier. Put it before the owner like an approval; a yes is kept on
+ * the card (grants.ts) and the agent is told to run it again, which starts its
+ * next turn with the command allowed. The same command denied again while the
+ * first is still open is not asked twice.
+ */
+export function reportDenial(subtask: Subtask, tool: string, input: unknown, reason: string, onAllow: (what: string) => void) {
+  const what = tool === 'Bash' && input && typeof input === 'object' ? String((input as Record<string, unknown>).command ?? '') : JSON.stringify(input);
+  const open = [...pending.values()].some((p) => p.approval.subtaskId === subtask.id && p.approval.denied && p.approval.tool === tool && p.approval.summary === what.slice(0, 600));
+  if (open) return;
+  const { answer } = requestApproval({ subtaskId: subtask.id, team: subtask.team }, tool, tool === 'Bash' ? { command: what } : input, reason);
+  bus.emit({ type: 'event', event: addEvent(subtask.id, 'status', `Nekades: ${tool} ${what.slice(0, 200)}. ${OWNER} kan tillåta det i Kräver beslut.`) });
+  void answer.then(({ allow }) => {
+    if (allow) onAllow(what);
+  });
+}
+
+/**
+ * A lead that watches says what is left, step by step. A step an agent is to do
+ * must name the card that does it, a card of this project that is not closed
+ * (or done, for a step already done): a plan that says "the jurist writes the line
+ * after the test" with no card for it waits forever. Returns the plan as text
+ * for the card's summary; throws with every step that is missing its card.
+ */
+function checkPlan(raw: unknown, ctx: Ctx): string {
+  const steps = Array.isArray(raw) ? raw.filter((s) => s && typeof s === 'object' && String((s as Record<string, unknown>).step ?? '').trim()) : [];
+  if (!steps.length)
+    throw new Error(`skicka med plan: stegen som återstår, i ordning, med vem som gör varje steg (agent med kortets nummer, owner eller person)`);
+  const cards = listSubtasks().filter((c) => c.team === ctx.team.id);
+  const missing: string[] = [];
+  const lines = steps.map((raw, i) => {
+    const s = raw as Record<string, unknown>;
+    const step = String(s.step).trim();
+    const by = String(s.by ?? '');
+    if (by !== 'agent') return `${i + 1}. ${step} (${by === 'owner' ? OWNER : 'person'})`;
+    const card = cards.find((c) => c.id === Number(s.card));
+    if (!card) missing.push(`"${step}"`);
+    else if (card.status === 'failed') missing.push(`"${step}" (kort #${card.id} gick inte; skapa ett nytt)`);
+    return `${i + 1}. ${step} (#${s.card ?? '?'})`;
+  });
+  if (missing.length)
+    throw new Error(
+      `${missing.length === 1 ? 'Ett steg' : `${missing.length} steg`} som en agent ska göra saknar kort: ${missing.join(', ')}. Skapa korten med create_subtask (depends_on om de ska vänta på något), och rapportera sedan igen med kortnumren i plan.`,
+    );
+  return `\n\nPlan:\n${lines.join('\n')}`;
 }
 
 /** Card and consultant pairs the owner has said yes to, for consent once per card. */
@@ -336,6 +390,19 @@ const TOOLS: Tool[] = [
         question: { type: 'string', description: `Vid needs-you: frågan till ${OWNER}.` },
         options: { type: 'array', items: { type: 'string' }, description: 'Vid needs-you: 2–4 korta alternativ.' },
         unblock: { type: 'string', description: 'Vid needs-you för ett test: vad du behöver för att testa själv.' },
+        plan: {
+          type: 'array',
+          description: `Teamleader som bevakar (watching): stegen som återstår, i ordning. by: "agent" (en agent i teamet gör det, och då måste card vara kortet som gör det, skapat med create_subtask, med depends_on om det ska vänta), "owner" (${OWNER}) eller "person" (någon annan, t.ex. en granskare). Ett agentsteg utan kort nekas: då görs det aldrig.`,
+          items: {
+            type: 'object',
+            properties: {
+              step: { type: 'string', description: 'Vad som ska göras, en rad.' },
+              by: { type: 'string', enum: ['agent', 'owner', 'person'] },
+              card: { type: 'number', description: 'Kortet som gör steget, när by är agent.' },
+            },
+            required: ['step', 'by'],
+          },
+        },
         login: {
           type: 'object',
           description: 'Vid needs-you för att något är utloggat.',
@@ -359,6 +426,8 @@ const TOOLS: Tool[] = [
       const standing = listTasks().find((t) => t.id === ctx.subtask.taskId)?.title === 'Boarden';
       if (a.status === 'watching' && !open && !standing)
         throw new Error(`du har inga öppna kort att bevaka: rapportera done om arbetet är klart, eller needs-you om något väntar på ${OWNER}`);
+      // A lead's plan: every step an agent is to do has a card, or nobody ever does it.
+      const plan = ctx.role.kind === 'lead' && a.status === 'watching' && !standing ? checkPlan(a.plan, ctx) : '';
       const options = Array.isArray(a.options) ? a.options.map(String).map((o: string) => o.trim()).filter(Boolean).slice(0, 4) : [];
       const ask: Ask | undefined =
         a.status === 'needs-you'
@@ -369,7 +438,7 @@ const TOOLS: Tool[] = [
               ...(loginOf(a.login) ? { login: loginOf(a.login)! } : {}),
             }
           : undefined;
-      reports.set(ctx.subtask.id, { status: a.status, summary: String(a.summary), prUrl: a.pr_url, ask });
+      reports.set(ctx.subtask.id, { status: a.status, summary: `${String(a.summary)}${plan}`, prUrl: a.pr_url, ask });
       return 'Noterat. Avsluta turen nu.';
     },
   },
@@ -578,12 +647,26 @@ const TOOLS: Tool[] = [
     name: 'notify_user',
     kinds: ['lead'],
     description:
-      `Säg något till ${OWNER} i notisflödet (och senare som push till telefonen). Bara när det kräver ${OWNER} eller är värt att veta: gruppera, aldrig en notis per händelse.`,
+      `Säg något till ${OWNER} i inkorgen (och som push till telefonen). Bara när det kräver ${OWNER} eller är värt att veta, aldrig en notis per händelse. En notis per sak som kräver ${OWNER}, inte en lista med flera: då försvinner var och en när den är löst. Nämn kortet den gäller med #nummer och PR:en med PR #nummer: när kortet är klart eller PR:en mergad stryks raden och notisen stängs av sig själv.`,
     inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
     run: (a, ctx) => {
       const notice = addNotice(ctx.team.id, ctx.subtask.id, String(a.text));
       bus.emit({ type: 'notice', notice });
-      return 'Skickat.';
+      return `Skickat som notis ${notice.id}.`;
+    },
+  },
+  {
+    name: 'close_notice',
+    kinds: ['lead'],
+    description: `Ta bort en av dina notiser ur ${OWNERS} inkorg när den inte längre stämmer: det den bad om är gjort, mergat eller löst med ${OWNER} direkt på kortet. Gäller en del fortfarande: stäng den och skicka en ny notis med bara det.`,
+    inputSchema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] },
+    run: (a, ctx) => {
+      const n = listNotices().find((x) => x.id === Number(a.id));
+      if (!n || n.team !== ctx.team.id) throw new Error(`notis ${a.id} finns inte i projektet`);
+      if (n.closedAt) return 'Den var redan stängd.';
+      const closed = closeNotice(n.id);
+      if (closed) bus.emit({ type: 'notice', notice: closed });
+      return 'Stängd.';
     },
   },
   {
@@ -773,7 +856,22 @@ const TOOLS: Tool[] = [
           `Har du inte verktygen: rapportera needs-you och be ${OWNER} ge din roll MCP-servern ${server}, eller logga in på den.${a.save_to ? ` Spara resultatet i ${a.save_to}.` : ''}`,
         ].join('\n');
       }
-      const { consultant, answer } = await consult(ctx.team.id, target.id, question, { saveTo: a.save_to, worktree: ctx.subtask.worktree, size: a.size });
+      // Followed live in the consultant's panel: the reasoning, searches and answer as they come.
+      const session = startConsultation({ team: ctx.team.id, consultant: target.id, subtaskId: ctx.subtask.id, asker: ctx.role.id, question });
+      let consultant: Awaited<ReturnType<typeof consult>>['consultant'];
+      let answer: Awaited<ReturnType<typeof consult>>['answer'];
+      try {
+        ({ consultant, answer } = await consult(ctx.team.id, target.id, question, {
+          saveTo: a.save_to,
+          worktree: ctx.subtask.worktree,
+          size: a.size,
+          onProgress: (p) => progress(session, p),
+        }));
+        finishConsultation(session, { answer: answer.text || (answer.images.length ? `${answer.images.length} bild(er)` : '') });
+      } catch (err) {
+        finishConsultation(session, { error: (err as Error).message });
+        throw err;
+      }
       for (const img of answer.images) bus.emit({ type: 'event', event: addEvent(ctx.subtask.id, 'image', img.url) });
       if (answer.text) {
         const shown = answer.text.length > 4000 ? `${answer.text.slice(0, 4000)} …` : answer.text;

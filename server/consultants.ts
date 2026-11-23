@@ -1,3 +1,4 @@
+import type { Progress } from './consultations.ts';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -389,41 +390,103 @@ export interface Answer {
 
 const LOG = join(DATA_DIR, 'consultants.log');
 
-async function askOpenAi(c: Consultant, question: string): Promise<string> {
+/** Models that reason before they answer, and can show a summary of it. */
+const REASONS = /^(o\d|gpt-([5-9]|\d{2}))/i;
+
+/**
+ * OpenAI's Responses API, streamed: the reasoning summary, the web searches and
+ * the answer arrive piece by piece and go to the consultant's panel as they come.
+ */
+async function askOpenAi(c: Consultant, question: string, onProgress?: (p: Progress) => void): Promise<string> {
   const key = keyOf('openai');
   if (!key) throw new Error('ingen OpenAI-nyckel');
   const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ model: c.model, instructions: c.instructions, input: question, ...(c.web ? { tools: [{ type: 'web_search' }] } : {}) }),
+    body: JSON.stringify({
+      model: c.model,
+      instructions: c.instructions,
+      input: question,
+      stream: true,
+      ...(REASONS.test(c.model) ? { reasoning: { summary: 'auto' } } : {}),
+      ...(c.web ? { tools: [{ type: 'web_search' }] } : {}),
+    }),
   });
-  const data = (await res.json()) as {
-    output_text?: string;
-    output?: { type: string; content?: { type: string; text?: string }[] }[];
-    error?: { message?: string };
-  };
-  if (!res.ok) throw new Error(`OpenAI: ${data.error?.message ?? res.status}`);
-  return (
-    data.output_text ??
-    (data.output ?? [])
-      .filter((o) => o.type === 'message')
-      .flatMap((o) => o.content ?? [])
-      .filter((p) => p.type === 'output_text')
-      .map((p) => p.text ?? '')
-      .join('\n')
-  ).trim();
+  if (!res.ok || !res.body) {
+    const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    throw new Error(`OpenAI: ${data.error?.message ?? res.status}`);
+  }
+  let answer = '';
+  let summaries = 0;
+  let buffer = '';
+  const decoder = new TextDecoder();
+  for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+    buffer += decoder.decode(chunk, { stream: true });
+    let cut: number;
+    // Server-sent events: blocks split by a blank line, the JSON on the data: line.
+    while ((cut = buffer.indexOf('\n\n')) >= 0) {
+      const block = buffer.slice(0, cut);
+      buffer = buffer.slice(cut + 2);
+      const line = block.split('\n').find((l) => l.startsWith('data:'));
+      if (!line) continue;
+      let e: Record<string, any>;
+      try {
+        e = JSON.parse(line.slice(5).trim());
+      } catch {
+        continue;
+      }
+      switch (e.type) {
+        case 'response.reasoning_summary_part.added':
+          if (summaries++ > 0) onProgress?.({ thinking: '\n\n' });
+          break;
+        case 'response.reasoning_summary_text.delta':
+          onProgress?.({ thinking: String(e.delta ?? '') });
+          break;
+        case 'response.output_item.done':
+          if (e.item?.type === 'web_search_call') {
+            const q = e.item.action?.query ?? e.item.action?.queries?.[0];
+            if (q) onProgress?.({ search: String(q) });
+          }
+          break;
+        case 'response.output_text.annotation.added':
+          if (e.annotation?.type === 'url_citation' && e.annotation.url) onProgress?.({ source: { url: String(e.annotation.url), title: e.annotation.title } });
+          break;
+        case 'response.output_text.delta':
+          answer += String(e.delta ?? '');
+          onProgress?.({ answer: String(e.delta ?? '') });
+          break;
+        case 'response.failed':
+        case 'error':
+          throw new Error(`OpenAI: ${e.response?.error?.message ?? e.message ?? 'fel under svaret'}`);
+      }
+    }
+  }
+  return answer.trim();
 }
 
 /** xAI and Perplexity speak OpenAI's chat completions. */
-async function askChat(c: Consultant, question: string, url: string, key: string, label: string): Promise<string> {
+async function askChat(c: Consultant, question: string, url: string, key: string, label: string, onProgress?: (p: Progress) => void): Promise<string> {
   const res = await fetch(url, {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({ model: c.model, messages: [{ role: 'system', content: c.instructions }, { role: 'user', content: question }] }),
   });
-  const data = (await res.json()) as { choices?: { message?: { content?: string } }[]; citations?: string[]; error?: string | { message?: string } };
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string; reasoning_content?: string } }[];
+    citations?: string[];
+    search_results?: { url: string; title?: string }[];
+    error?: string | { message?: string };
+  };
   if (!res.ok) throw new Error(`${label}: ${typeof data.error === 'string' ? data.error : (data.error?.message ?? res.status)}`);
-  const text = (data.choices?.[0]?.message?.content ?? '').trim();
+  const message = data.choices?.[0]?.message;
+  // Reasoning models put their thinking beside the answer (xAI) or in <think> first (Perplexity).
+  let text = (message?.content ?? '').trim();
+  const think = /^<think>([\s\S]*?)<\/think>\s*/.exec(text);
+  if (think) text = text.slice(think[0].length).trim();
+  const thinking = (message?.reasoning_content ?? think?.[1] ?? '').trim();
+  if (thinking) onProgress?.({ thinking });
+  for (const r of data.search_results ?? []) onProgress?.({ source: { url: r.url, title: r.title } });
+  if (!data.search_results?.length) for (const url of data.citations ?? []) onProgress?.({ source: { url } });
   return data.citations?.length ? `${text}\n\nKällor:\n${data.citations.map((u) => `- ${u}`).join('\n')}` : text;
 }
 
@@ -441,7 +504,7 @@ async function grokImage(c: Consultant, question: string): Promise<Buffer> {
   return Buffer.from(b64, 'base64');
 }
 
-async function askGemini(c: Consultant, question: string): Promise<{ text: string; images: Buffer[] }> {
+async function askGemini(c: Consultant, question: string, onProgress?: (p: Progress) => void): Promise<{ text: string; images: Buffer[] }> {
   const key = keyOf('gemini');
   if (!key) throw new Error('ingen Gemini-nyckel (control-room-gemini i nyckelringen)');
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(c.model)}:generateContent`, {
@@ -451,16 +514,30 @@ async function askGemini(c: Consultant, question: string): Promise<{ text: strin
       systemInstruction: { parts: [{ text: c.instructions }] },
       contents: [{ role: 'user', parts: [{ text: question }] }],
       ...(c.web ? { tools: [{ google_search: {} }] } : {}),
+      // A thinking model shows a summary of its thoughts, beside the answer.
+      ...(c.kind === 'text' && THINKS.test(c.model) ? { generationConfig: { thinkingConfig: { includeThoughts: true } } } : {}),
     }),
   });
   const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string; inlineData?: { mimeType: string; data: string } }[] } }[];
+    candidates?: {
+      content?: { parts?: { text?: string; thought?: boolean; inlineData?: { mimeType: string; data: string } }[] };
+      groundingMetadata?: { webSearchQueries?: string[]; groundingChunks?: { web?: { uri: string; title?: string } }[] };
+    }[];
     error?: { message?: string };
   };
   if (!res.ok) throw new Error(`Gemini: ${data.error?.message ?? res.status}`);
-  const parts = data.candidates?.[0]?.content?.parts ?? [];
+  const candidate = data.candidates?.[0];
+  const parts = candidate?.content?.parts ?? [];
+  const thoughts = parts.filter((p) => p.thought && p.text).map((p) => p.text!.trim());
+  if (thoughts.length) onProgress?.({ thinking: thoughts.join('\n\n') });
+  for (const q of candidate?.groundingMetadata?.webSearchQueries ?? []) onProgress?.({ search: q });
+  for (const g of candidate?.groundingMetadata?.groundingChunks ?? []) if (g.web?.uri) onProgress?.({ source: { url: g.web.uri, title: g.web.title } });
   return {
-    text: parts.map((p) => p.text ?? '').join('').trim(),
+    text: parts
+      .filter((p) => !p.thought)
+      .map((p) => p.text ?? '')
+      .join('')
+      .trim(),
     images: parts.filter((p) => p.inlineData?.mimeType.startsWith('image/')).map((p) => Buffer.from(p.inlineData!.data, 'base64')),
   };
 }
@@ -483,12 +560,15 @@ function saveImage(teamId: string, name: string, png: Buffer, saveTo?: string, w
   return image;
 }
 
+/** Gemini models that think first (2.5 and later). */
+const THINKS = /gemini-(2\.5|[3-9])/i;
+
 /** Asks the consultant one question and returns its answer: text, and pictures from an image consultant. */
 export async function consult(
   teamId: string,
   ref: string,
   question: string,
-  opts: { saveTo?: string; worktree?: string | null; size?: '1024x1024' | '1536x1024' | '1024x1536' } = {},
+  opts: { saveTo?: string; worktree?: string | null; size?: '1024x1024' | '1536x1024' | '1024x1536'; onProgress?: (p: Progress) => void } = {},
 ): Promise<{ consultant: Consultant; answer: Answer }> {
   const team = getTeam(teamId);
   if (!team) throw new Error('teamet finns inte');
@@ -526,12 +606,12 @@ export async function consult(
     };
     const text =
       c.provider === 'gemini'
-        ? (await askGemini(c, question)).text
+        ? (await askGemini(c, question, opts.onProgress)).text
         : c.provider === 'grok'
-          ? await askChat(c, question, 'https://api.x.ai/v1/chat/completions', key('grok'), 'xAI')
+          ? await askChat(c, question, 'https://api.x.ai/v1/chat/completions', key('grok'), 'xAI', opts.onProgress)
           : c.provider === 'perplexity'
-            ? await askChat(c, question, 'https://api.perplexity.ai/chat/completions', key('perplexity'), 'Perplexity')
-            : await askOpenAi(c, question);
+            ? await askChat(c, question, 'https://api.perplexity.ai/chat/completions', key('perplexity'), 'Perplexity', opts.onProgress)
+            : await askOpenAi(c, question, opts.onProgress);
     if (!text) throw new Error(`${consultantWho(c)} gav inget svar`);
     answer = { text, images: [] };
   }

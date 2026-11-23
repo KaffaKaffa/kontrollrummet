@@ -114,7 +114,7 @@ export function useSystemNotifications(board: Board) {
       const card = a.subtaskId != null ? board.subtasks.find((s) => s.id === a.subtaskId) : undefined;
       const role = card ? board.teams.find((t) => t.id === card.team)?.roles.find((r) => r.id === card.agent) : undefined;
       show({
-        title: `${card ? `${nameOf(role) ?? card.agent} #${card.id}` : 'Gudfadern'} vill ha ditt godkännande`,
+        title: `${card ? `${nameOf(role) ?? card.agent} #${card.id}` : 'Gudfadern'} ${a.denied ? 'nekades, vill du tillåta?' : 'vill ha ditt godkännande'}`,
         body: firstLine(a.summary),
         href: card ? `#/${card.team}/office/card/${card.id}` : a.conversationId != null ? `#/gudfadern/${a.conversationId}` : '#/',
         tag: `approval-${a.id}`,

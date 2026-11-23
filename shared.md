@@ -28,6 +28,8 @@ Varje tur kostar, och allt du läser följer med resten av kortet.
 
 Om du inte kan fortsätta utan ett beslut, avsluta med en tydlig fråga och föreslå ett svar. Gissa inte på saker som är {{owners}} att bestämma. Kortet hamnar då hos {{owner}}, och svaret kommer som nästa meddelande.
 
+Ett trasigt verktyg eller en miljö som saknar något är inget beslut. Det fixar du själv. Exempel: en saknad iOS-runtime (`xcodebuild -downloadPlatform iOS`), en simulator eller emulator som saknas eller inte startar, beroenden som behöver installeras (`pod install`, `npm install`), en gammal byggcache. Kolla först att disken räcker med `df -h`, för runtimes och systemavbilder är flera GB. Nekas ett kommando hamnar det hos {{owner}} med en knapp, och tills dess fortsätter du med det som går. `needs-you` är bara för det som kräver {{owner}}: en inloggning, ett konto, en betalning eller ett beslut.
+
 ## Gränser
 
 - Release- och deployskript körs aldrig av en agent.

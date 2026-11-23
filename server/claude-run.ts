@@ -7,21 +7,41 @@ import { accountEnv } from './accounts.ts';
  */
 
 /**
+ * Rules that block running a script, not touching it. Claude Code matches each
+ * part of a command (a && b; c | d) on its own, so these hit `./x/release.sh`,
+ * `bash release.sh` and `cd native && node scripts/upload-play.mjs`, but not
+ * `sed -n 1,80p release.sh`, `grep` or `git checkout` on the file. A rule that
+ * hits a file an agent only reads stops a card with no way for the owner to say yes.
+ */
+function runs(file: string): string[] {
+  const how = ['bash', 'sh', 'zsh', 'node', 'pwsh', 'powershell', 'source', '.', 'exec'];
+  return [
+    `Bash(${file}*)`,
+    `Bash(./*${file}*)`,
+    `Bash(/*${file}*)`,
+    `Bash(native/*${file}*)`,
+    `Bash(scripts/*${file}*)`,
+    ...how.map((h) => `Bash(${h} *${file}*)`),
+  ];
+}
+
+/**
  * Releases go out through the Releases panel's buttons and nowhere else, so no
  * agent can ship on its own, whatever it is asked.
  */
 export const NEVER = [
   // npm run, npm --prefix … run, npm run-script: any spelling of the release scripts.
-  'Bash(*release:*)',
-  'Bash(*upload:android*)',
-  'Bash(*release-ios.sh*)',
-  'Bash(*release-android.sh*)',
-  'Bash(*upload-play.mjs*)',
-  'Bash(*release.sh*)',
-  'Bash(*release.ps1*)',
-  'Bash(*altool*)',
+  // Only when a package manager runs them: grep release: package.json is fine.
+  ...['npm', 'pnpm', 'yarn', 'bun', 'npx'].flatMap((pm) => [`Bash(${pm} *release:*)`, `Bash(${pm} *upload:android*)`]),
+  ...runs('release-ios.sh'),
+  ...runs('release-android.sh'),
+  ...runs('upload-play.mjs'),
+  ...runs('release.sh'),
+  ...runs('release.ps1'),
+  'Bash(altool*)',
+  'Bash(xcrun altool*)',
   // Web and backend deploy from GitHub, never from here.
-  'Bash(*deploy.sh*)',
+  ...runs('deploy.sh'),
   'Bash(gh workflow run*)',
   'Bash(gh api *dispatches*)',
   'Bash(az deployment*)',
@@ -41,6 +61,9 @@ export const NEVER = [
  */
 export const CONTEXT_WINDOW = 140_000;
 
+/** How long a call to the control room's own tools may take: an approval (30 min) and then the work. */
+export const CONTROL_ROOM_TOOL_MS = 35 * 60 * 1000;
+
 /**
  * A process for this account: its login and gh, the compaction window, and
  * tool output cut short, since whatever a tool prints is read on every later step.
@@ -50,7 +73,10 @@ export function claudeEnv(account: string, context: number, extra: Record<string
     ...accountEnv(account),
     ...extra,
     // An approval can wait for the owner for half an hour; the tool call must outlive that.
-    MCP_TOOL_TIMEOUT: String(35 * 60 * 1000),
+    MCP_TOOL_TIMEOUT: String(CONTROL_ROOM_TOOL_MS),
+    // A call is also cut after 300 s with no word from the server: waiting for the owner's
+    // yes and then a consultant's answer is exactly that, so the answer came and was lost.
+    CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT: String(CONTROL_ROOM_TOOL_MS),
     CLAUDE_CODE_AUTO_COMPACT_WINDOW: String(context || CONTEXT_WINDOW),
     BASH_MAX_OUTPUT_LENGTH: '15000',
     MAX_MCP_OUTPUT_TOKENS: '10000',

@@ -11,7 +11,7 @@ import { getAccount, identityTerminal } from './accounts.ts';
 import { countAlso, runningCount } from './agent.ts';
 import { heldBy } from './holds.ts';
 import { bus } from './bus.ts';
-import { NEVER, claudeEnv, contextOf, describeTool, toolResultText, userLine } from './claude-run.ts';
+import { NEVER, CONTROL_ROOM_TOOL_MS, claudeEnv, contextOf, describeTool, toolResultText, userLine } from './claude-run.ts';
 import {
   addConvEvent,
   createConversation,
@@ -196,7 +196,7 @@ function launch(id: number, message: string) {
     '--permission-prompt-tool', 'mcp__control-room__approve',
     '--mcp-config', JSON.stringify({
       mcpServers: {
-        'control-room': { type: 'http', url: `http://127.0.0.1:${PORT}/mcp/godfather`, headers: { Authorization: `Bearer ${token}` } },
+        'control-room': { type: 'http', url: `http://127.0.0.1:${PORT}/mcp/godfather`, headers: { Authorization: `Bearer ${token}` }, timeout: CONTROL_ROOM_TOOL_MS },
       },
     }),
     '--append-system-prompt', PROMPT,

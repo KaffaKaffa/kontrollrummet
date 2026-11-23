@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { AgentEvent, ConvEvent, Conversation, Notice, Plan, Subtask, Task } from './db.ts';
 import type { Usage } from './usage.ts';
+import type { Consultation } from './consultations.ts';
 import type { Job } from './deploy.ts';
 import type { DevAppView } from './devapps.ts';
 import type { OwnPr } from './git.ts';
@@ -16,6 +17,12 @@ export interface Approval {
   /** What the agent wants to run, short enough to read on a phone. */
   summary: string;
   at: string;
+  /**
+   * Claude Code already said no on its own (a hard rule or auto mode), so
+   * nothing waits on this: a yes allows it for the card and tells the agent to
+   * run it again. The reason as Claude Code gave it.
+   */
+  denied?: string;
 }
 
 /** What the browser hears about, pushed over the WebSocket as it happens. */
@@ -29,6 +36,8 @@ export type Broadcast =
   | { type: 'usage'; account: string; usage: Usage }
   | { type: 'job'; job: Job }
   | { type: 'approval'; approval: Approval }
+  /** A question to a consultant: started, a piece of its reasoning or answer, finished. */
+  | { type: 'consultation'; consultation: Consultation }
   | { type: 'approval-done'; id: string }
   | { type: 'conversation'; conversation: Conversation }
   | { type: 'conv-event'; event: ConvEvent }

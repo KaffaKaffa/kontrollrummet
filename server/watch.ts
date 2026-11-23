@@ -2,11 +2,14 @@ import { providerFor, type OwnPr, type PrFeedback } from './git.ts';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DATA_DIR } from './config.ts';
+import { noticeSettled } from './notice-refs.ts';
 import { bus } from './bus.ts';
-import { OWNER } from './owner.ts';
+import { OWNER, OWNERS } from './owner.ts';
 import {
   addEvent,
   addNotice,
+  closeNotice,
+  listNotices,
   createSubtask,
   createTask,
   getSubtask,
@@ -20,6 +23,7 @@ import {
   type SubtaskStatus,
 } from './db.ts';
 import { isRunning, startAgent } from './agent.ts';
+import { removeWorktree } from './worktree.ts';
 import { getTeam, loadTeams, nameIn, peopleNames, repoFor, whoIn, type Team } from './roles.ts';
 
 
@@ -64,6 +68,20 @@ function parentShouldHear(child: Subtask): boolean {
   return true;
 }
 
+/**
+ * Cards the owner wrote to directly: the lead above them did not see that
+ * conversation, so when the card's turn ends it hears what came of it, whatever
+ * its siblings are doing. sent: the message is in; ran: the agent took it.
+ */
+const ownerSpoke = new Map<number, 'sent' | 'ran'>();
+/** Of the cards in the next message to a parent: those the owner spoke to. */
+const spokenTo = new Set<number>();
+
+export function ownerWroteTo(subtaskId: number) {
+  const s = getSubtask(subtaskId);
+  if (s?.parentId != null) ownerSpoke.set(subtaskId, 'sent');
+}
+
 function queueForParent(child: Subtask) {
   if (child.parentId == null) return;
   const set = pending.get(child.parentId) ?? new Set();
@@ -94,14 +112,27 @@ function flush(parentId: number) {
     .filter((s): s is Subtask => Boolean(s))
     .map((s) => {
       const said = s.summary ? `\n  Sa: ${s.summary.slice(0, 600).replaceAll('\n', '\n  ')}` : '';
-      return `- Kort #${s.id} (${whoIn(s.team, s.agent)}) ${STATUS_TEXT[s.status]}${s.prUrl ? `: ${s.prUrl}` : ''}.${said}`;
+      const spoke = spokenTo.delete(s.id) ? ` ${OWNER} har pratat direkt med kortet; läs dess logg om du behöver veta vad som bestämdes.` : '';
+      return `- Kort #${s.id} (${whoIn(s.team, s.agent)}) ${STATUS_TEXT[s.status]}${s.prUrl ? `: ${s.prUrl}` : ''}.${spoke}${said}`;
     });
   if (!lines.length) return;
+  // What the lead has told the owner and is still in the Inbox: it may no longer be true.
+  const parent = getSubtask(parentId);
+  const open = parent ? listNotices().filter((n) => !n.closedAt && n.team === parent.team && n.subtaskId === parentId) : [];
+  const notices = open.length
+    ? [
+        '',
+        `Dina notiser som ligger kvar i ${OWNERS} inkorg:`,
+        ...open.map((n) => `- Notis ${n.id}: ${n.text.slice(0, 300).replaceAll('\n', ' ')}`),
+        `Stämmer någon inte längre (klart, mergat, löst med ${OWNER} på kortet): stäng den med close_notice. Gäller en del fortfarande: stäng den och skicka en ny notis med bara det.`,
+      ]
+    : [];
   const message = [
     '[Kontrollrummet] Läget på dina kort:',
     ...lines,
+    ...notices,
     '',
-    `Följ upp: svara på frågor du kan svara på själv (reply_to_card), skapa det som saknas, och hör av dig till ${OWNER} bara om något kräver ${OWNER}. Avsluta med report.`,
+    `Följ upp: svara på frågor du kan svara på själv (reply_to_card), skapa det som saknas, och hör av dig till ${OWNER} bara om något kräver ${OWNER}. Avsluta med report. Bevakar du: skicka med plan, där varje steg en agent ska göra har sitt kort.`,
   ].join('\n');
   void startAgent(parentId, message, { wake: true }).catch((err: Error) => {
     bus.emit({ type: 'event', event: addEvent(parentId, 'error', `Kunde inte väcka: ${err.message}`) });
@@ -192,6 +223,56 @@ async function checkPrs() {
   }
   await checkFeedback().catch(() => undefined);
   closeIdleWatchers();
+  closeSettledNotices();
+}
+
+/** A done card keeps its worktree this long, in case the owner has a last word for it. */
+const TIDY_AFTER_MS = 30 * 60 * 1000;
+
+/**
+ * A card that became done or failed gives its worktree back after a while: a
+ * worktree for an app with node_modules and Pods is gigabytes, and a project
+ * with a hundred done cards fills the disk. Only if the card is still settled
+ * and nothing in it is uncommitted (git refuses otherwise). Woken again, the
+ * card gets its worktree back from its branch.
+ */
+function tidyLater(subtaskId: number) {
+  setTimeout(() => {
+    const s = getSubtask(subtaskId);
+    if (!s?.worktree || (s.status !== 'done' && s.status !== 'failed') || isRunning(s.id)) return;
+    // Another card working in the same folder (a tester on the author's worktree): leave it.
+    if (listSubtasks().some((o) => o.id !== s.id && o.worktree === s.worktree && o.status !== 'done' && o.status !== 'failed')) return;
+    void removeWorktree(s.worktree).then((removed) => {
+      if (removed) bus.emit({ type: 'event', event: addEvent(s.id, 'system', `Worktreen är borttagen för att spara plats. Branchen ${s.branch ?? ''} finns kvar och worktreen görs om om kortet väcks.`) });
+    });
+  }, TIDY_AFTER_MS);
+}
+
+/**
+ * "PR #12 kan mergas: <url>" is old news once the PR is merged or closed, whoever
+ * wrote it (the PR round or an agent). Only a notice about merging or reviewing,
+ * and only when every PR it links is settled: one that also asks for something
+ * else, or lists a PR still open, stays for the owner to close.
+ */
+const ABOUT_MERGE = /kan mergas|redo att merga|väntar på din granskning|är godkänd/i;
+const PR_LINK = /https:\/\/\S+?\/(?:pull|pullrequest)\/\d+/g;
+
+function closeSettledNotices() {
+  const cards = listSubtasks();
+  const settled = new Set(cards.filter((s) => s.prUrl && (s.status === 'done' || s.status === 'failed')).map((s) => s.prUrl!));
+  // Another card still waiting on the same PR (a tester's, say): not settled yet.
+  for (const s of cards) if (s.prUrl && s.status === 'pr-open') settled.delete(s.prUrl);
+  for (const n of listNotices()) {
+    if (n.closedAt) continue;
+    const prs = n.text.match(PR_LINK) ?? [];
+    const merged = ABOUT_MERGE.test(n.text) && prs.length > 0 && prs.every((u) => settled.has(u));
+    // Everything it names (#108, PR #397) has moved on since it was written: done or merged.
+    const team = cards.filter((c) => c.team === n.team);
+    // Only a card's own notice: the review lists name other people's PRs ("Web #52"), not cards.
+    if (!merged && (n.subtaskId == null || !noticeSettled(n.text, team, n.at))) continue;
+    const closed = closeNotice(n.id);
+    if (closed) bus.emit({ type: 'notice', notice: closed });
+  }
 }
 
 // ---------------------------------------------------------------- reviews on our PRs
@@ -269,6 +350,9 @@ async function checkFeedback() {
     next[url] = { seen: all.map((f) => f.id), wokeAt: before?.wokeAt };
     if (!fresh.length) continue;
     next[url].wokeAt = new Date().toISOString();
+    // Copilot says a person should look: someone who did not write the PR checks what it points at.
+    const closer = fresh.map(closerLook).find(Boolean);
+    const checker = closer ? closerLookCard(owner, url, closer) : null;
     const who = [...new Set(fresh.map((f) => f.author))].join(', ');
     bus.emit({
       type: 'event',
@@ -282,6 +366,9 @@ async function checkFeedback() {
         ...fresh.map(feedbackLine),
         '',
         `Gå igenom varje punkt i din worktree. Åtgärda det som stämmer, kör testerna och pusha. Stämmer något inte, eller är det redan löst, svara kort i tråden varför (gh pr comment, eller svar på kommentaren med gh api; az devops invoke på Azure DevOps). Granskning från bottar som Copilot kan ha fel: bedöm själv. Är en punkt ett beslut som är ${OWNER}s, rapportera needs-you med frågan och alternativen. Annars avsluta med report pr-open och en kort sammanfattning av vad du ändrade.`,
+        checker
+          ? `\nCopilot vill att någon tittar närmare på PR:en. ${nameIn(checker.team, checker.agent)} gör det på kort #${checker.id} och kommenterar i PR:en. Avfärda inte det Copilot pekar på själv; du hör av dig när kortet är klart och åtgärdar då det som hittades.`
+          : '',
       ].join('\n'),
       { wake: true },
     ).catch((err: Error) => {
@@ -289,6 +376,72 @@ async function checkFeedback() {
     });
   }
   writeFileSync(FEEDBACK_FILE, JSON.stringify(next));
+}
+
+/** Copilot's "Needs a closer look" and the reason it gives; null for any other review. */
+function closerLook(f: PrFeedback): string | null {
+  if (!/copilot/i.test(f.author)) return null;
+  const m = /needs a closer look\s*\n+([\s\S]*?)(?:\n\s*\n|\*\*|<details|$)/i.exec(f.body);
+  if (!m) return null;
+  return m[1].trim() || 'Copilot gav ingen motivering.';
+}
+
+/**
+ * A card that checks what Copilot wants a person to look at, made by someone who
+ * did not write the PR (the team's architect, or a fresh card of the author's
+ * role): the author has every reason to say it is fine already. It reads the
+ * PR without changing it and leaves one comment on it; what it finds goes back
+ * to the author's card as its child.
+ */
+function closerLookCard(owner: Subtask, url: string, reason: string): Subtask | null {
+  const team = getTeam(owner.team);
+  if (!team) return null;
+  const role = team.roles.find((r) => r.kind === 'architect') ?? team.roles.find((r) => r.id === owner.agent);
+  if (!role) return null;
+  // What other cards already did with the PR (a tester who ran it on devices): checked, not redone.
+  const pr = new RegExp(`${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\d)|PR #${owner.prNumber}\\b`);
+  const related = listSubtasks().filter((c) => c.team === owner.team && c.id !== owner.id && (c.prUrl === url || pr.test(c.brief)));
+  const known = related.map((c) => `- Kort #${c.id} (${whoIn(c.team, c.agent)}) ${STATUS_TEXT[c.status]}: ${(c.summary ?? c.note ?? c.brief).slice(0, 500).replaceAll('\n', ' ')}`);
+  const brief = [
+    `Copilot har markerat PR #${owner.prNumber} med "Needs a closer look": ${url}`,
+    '',
+    `Copilots motivering: ${reason}`,
+    '',
+    ...(known.length ? ['Det här har andra kort redan gjort med PR:en. Räkna med det, men kontrollera att det täcker det Copilot säger:', ...known, ''] : []),
+    `Du har inte skrivit PR:en. Titta på det Copilot pekar på, med egna ögon:`,
+    `- Läs PR:en utan att byta branch i den här mappen: \`gh pr view ${owner.prNumber}\`, \`gh pr diff ${owner.prNumber}\`, och filer med \`git fetch origin ${owner.branch ?? '<branchen>'}\` och \`git show origin/${owner.branch ?? '<branchen>'}:<fil>\`. På Azure DevOps: motsvarande med az repos.`,
+    '- Kontrollera varje sak Copilot nämner: koden det gäller, andra PR:er eller ärenden den hänvisar till, och om det som sägs stämmer. Kör det som behövs för att veta, men ändra inget.',
+    '- Behövs ett test på enhet eller i webbläsare som inget kort har gjort: säg det i kommentaren och i din rapport, så tar teamet det.',
+    `- Lämna en kommentar på PR:en (gh pr comment) med en rad per sak: stämmer (och varför), problem (fil och rad, vad som är fel), eller kräver ${OWNER} (vad som behöver avgöras).`,
+    '',
+    `Avsluta med report done och samma sammanfattning. Kräver något ett beslut av ${OWNER}: report needs-you med frågan och alternativen.`,
+  ].join('\n');
+  const card = createSubtask({ id: owner.taskId, team: owner.team }, role.id, brief, { parentId: owner.id, repo: owner.repo });
+  bus.emit({ type: 'subtask', subtask: card });
+  bus.emit({ type: 'event', event: addEvent(card.id, 'system', `Skapat av kontrollrummet: Copilot vill att någon tittar närmare på PR #${owner.prNumber}.`) });
+  bus.emit({ type: 'event', event: addEvent(owner.id, 'status', `Copilot vill att någon tittar närmare på PR #${owner.prNumber}. ${nameIn(card.team, card.agent)} gör det på kort #${card.id}.`) });
+  onSyncCard();
+  return card;
+}
+
+/**
+ * Asked for by hand: a closer look at a card's PR now, from Copilot's latest
+ * "Needs a closer look" on it, for one that came before the round knew to.
+ */
+export async function closerLookNow(id: number): Promise<Subtask> {
+  const owner = getSubtask(id);
+  if (!owner?.prUrl) throw new Error('kortet har ingen PR');
+  const team = getTeam(owner.team);
+  if (!team) throw new Error('projektet finns inte');
+  const repo = repoFor(team, team.roles.find((r) => r.id === owner.agent), owner);
+  const host = await providerFor(repo.path);
+  if (!host) throw new Error('repot har ingen GitHub- eller Azure DevOps-remote');
+  const all = await host.prFeedback(owner.prUrl, repo.path, { account: team.account, azureConfigDir: team.azureConfigDir });
+  const reason = all.map(closerLook).filter(Boolean).at(-1);
+  if (!reason) throw new Error('Copilot har inte bett om en närmare titt på PR:en');
+  const card = closerLookCard(owner, owner.prUrl, reason);
+  if (!card) throw new Error('ingen roll kan granska');
+  return card;
 }
 
 /**
@@ -570,7 +723,19 @@ export function startWatching(onCardCreated: () => void = () => {}) {
     const s = m.subtask;
     const before = lastStatus.get(s.id);
     lastStatus.set(s.id, s.status);
-    if (before !== s.status && WORTH_TELLING.includes(s.status) && parentShouldHear(s)) tellParent(s);
+    // The owner talked to the card directly: once its turn is over, its lead hears what came of it.
+    const spoke = ownerSpoke.get(s.id);
+    if (spoke === 'sent' && s.status === 'running') ownerSpoke.set(s.id, 'ran');
+    else if (spoke === 'ran' && s.status !== 'running' && s.status !== 'queued' && s.status !== 'quota') {
+      ownerSpoke.delete(s.id);
+      spokenTo.add(s.id);
+      tellParent(s);
+    } else if (before !== s.status && WORTH_TELLING.includes(s.status) && parentShouldHear(s)) tellParent(s);
+    // A card done or failed may settle what a notice asked about: out of the inbox at once.
+    if (before !== s.status && (s.status === 'done' || s.status === 'failed')) {
+      closeSettledNotices();
+      tidyLater(s.id);
+    }
     // A plan is carried out when the lead it was handed to says its task is done.
     if (before !== 'done' && s.status === 'done' && s.parentId == null) {
       const plan = listPlans().find((p) => p.taskId === s.taskId && p.status === 'implementing');
