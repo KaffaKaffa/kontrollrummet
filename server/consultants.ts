@@ -133,7 +133,7 @@ export function providerStatus(): Record<ApiProvider, boolean> {
 const dirOf = (teamId: string) => join(TEAMS_DIR, teamId, 'consultants');
 
 function parse(id: string, source: string): Consultant {
-  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(source);
+  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(source.replace(/\r\n/g, '\n'));
   const meta = new Map<string, string>();
   for (const line of (match?.[1] ?? '').split('\n')) {
     const i = line.indexOf(':');

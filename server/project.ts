@@ -37,8 +37,10 @@ export function listTemplates(): RoleTemplate[] {
 
 /** A role file from a template; the template's own front matter, minus what only the library uses. */
 function roleSource(templateId: string, over: { name?: string; owns?: string[]; model?: string; mcp?: 'all' | string[]; repos?: string[] }): string {
-  const source = readFileSync(join(LIBRARY, 'roles', `${templateId}.md`), 'utf8');
-  const [, head, body] = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(source)!;
+  const source = readFileSync(join(LIBRARY, 'roles', `${templateId}.md`), 'utf8').replace(/\r\n/g, '\n');
+  const parts = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(source);
+  if (!parts) throw new Error(`Role template ${templateId}.md has no front matter (expected --- ... --- at the top)`);
+  const [, head, body] = parts;
   const lines = head.split('\n').filter((l) => !l.startsWith('suggestWhen:'));
   const set = (key: string, value: string | null) => {
     const i = lines.findIndex((l) => l.startsWith(`${key}:`));

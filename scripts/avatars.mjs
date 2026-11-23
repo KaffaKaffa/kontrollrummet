@@ -64,7 +64,7 @@ const BODY =
 function frontMatter(path) {
   const src = readFileSync(path, 'utf8');
   return Object.fromEntries(
-    (/^---\n([\s\S]*?)\n---/.exec(src)?.[1] ?? '')
+    (/^---\n([\s\S]*?)\n---/.exec(src.replace(/\r\n/g, '\n'))?.[1] ?? '')
       .split('\n')
       .filter((l) => l.includes(':'))
       .map((l) => [l.slice(0, l.indexOf(':')).trim(), l.slice(l.indexOf(':') + 1).trim()]),
