@@ -23,3 +23,52 @@ hamna där och gå inte att ta tillbaka.
 - `npm run typecheck` och `npm run build` ska gå igenom.
 - Servern startas om med knappen i appen (eller `POST /api/restart`), som väntar tills agenter och
   byggen är klara. Döda den aldrig mitt i ett bygge.
+
+## Vad det är
+
+Kontrollrummet: en lokal app (Node-server + React-webb, med inbyggda skal för macOS i Swift och
+Windows i C#) som kör ett team Claude Code-agenter per repo, en agent per app, med en board där varje
+uppgift går att följa. Allt körs på ägarens egen dator, under hens egna konton.
+
+## Bygga, köra, kontrollera
+
+Node 22.18 eller nyare (`node:sqlite`, servern kör TypeScript direkt). Inga tester och ingen lint finns.
+
+```
+npm install
+npm run typecheck      # tsc --noEmit
+npm run build          # vite build av webben till web/dist
+npm run check:public   # ska vara rent innan push
+npm run dev            # server med --watch + Vite (UI på http://localhost:5173)
+npm start              # bygger och startar servern (http://127.0.0.1:4317)
+```
+
+Verifierat: `typecheck`, `build`, `check:public` och att servern svarar 200 på `/`.
+Ska du starta en egen server bredvid den riktiga (så gör testare): `CONTROL_ROOM_PORT=4399
+CONTROL_ROOM_DATA=$(mktemp -d) node --disable-warning=ExperimentalWarning server/main.ts`. Då rörs
+varken riktig data eller port 4317.
+
+Kör aldrig `install:*`, `uninstall:*` eller andra skript som installerar appen eller en LaunchAgent
+på datorn. `npm run dev` kräver fria portar 4317 och 5173 (Vite har `strictPort`).
+
+## Var saker ligger
+
+- `server/` – Node-servern (TypeScript, ingen byggsteg). `main.ts` är HTTP-API och websocket
+  (`/api/live`), `orchestrator.ts` och `agent.ts` kör agenterna, `db.ts` är SQLite, `worktree.ts` och
+  `git.ts` hanterar worktrees, `roles.ts` läser roller, `config.ts` portar och sökvägar.
+- `web/src/` – React-UI. `App.tsx` är skalet, `project.tsx` boarden, `settings.tsx` inställningar,
+  `office3d/` 3D-kontoret, `styles.css` och `tokens.css` stilar (`npm run tokens:sync` synkar tokens).
+- `desks/` – skrivborden (teamleader, architect, gudfadern): varsin `CLAUDE.md` och MCP-config.
+- `shared.md` – systemprompten alla agenter får. `library/` – porträtt, karaktärer, 3D-modeller.
+- `mac/` och `windows/` – skalen runt webben. `scripts/` – install, dev och `check-public.mjs`.
+- `teams/` – projekten på den här datorn. Ligger utanför git (utom README och exemplet).
+- `.claude/skills/pr-kontrollrummet/` – skillen för PR:er mot det publika repot.
+
+## Fallgropar
+
+- Servern lyssnar på 127.0.0.1:4317 (`CONTROL_ROOM_PORT`). Data och loggar ligger i
+  `~/.control-room/` (`CONTROL_ROOM_DATA`), inställningar i `~/.control-room/env`. Loggar för
+  skrivborden: `~/.control-room/logs/desk-*.log`.
+- API-nycklar får aldrig ligga i filer: de ligger i nyckelringen (macOS) eller krypterat (Windows).
+- Roller, `teams/*` och porträtt per projekt är lokala och ska inte committas (se `.gitignore`).
+- Rör inte servern som körs för riktigt (se Arbetssätt ovan om omstart).
