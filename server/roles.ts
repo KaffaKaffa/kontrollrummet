@@ -322,7 +322,7 @@ export interface Team {
  * Lists are comma separated. Kept deliberately dumber than YAML.
  */
 export function parseRole(id: string, source: string): Role {
-  const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(source);
+  const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(source.replace(/\r\n/g, '\n'));
   if (!match) throw new Error(`roles/${id}.md has no front matter`);
   const meta = new Map<string, string>();
   for (const line of match[1].split('\n')) {

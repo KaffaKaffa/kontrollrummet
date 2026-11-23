@@ -24,4 +24,4 @@ export const CLAUDE_BIN = process.env.CONTROL_ROOM_CLAUDE ?? 'claude';
 
 export const DEV = process.argv.includes('--dev');
 
-export const expandHome = (p: string) => (p.startsWith('~/') ? join(homedir(), p.slice(2)) : p);
+export const expandHome = (p: string) => (/^~[\\/]/.test(p) ? join(homedir(), p.slice(2)) : p);

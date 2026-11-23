@@ -466,6 +466,7 @@ Testaren och utvecklarna kan be om att få starta VM:en med `start_vm`. Frågan 
 - **Loggar** finns i `~/.control-room/logs/` (`server.log`, `desk-*.log`).
 - **"Workspace not trusted" i en desk-logg:** öppna `claude`, med samma profil som i `~/.control-room/env`, i `desks/teamleader` och godkänn.
 - **Ett kort som står still:** öppna det och skriv till agenten, eller tryck **Terminal** för att ta över med `claude --resume` i dess worktree.
+- **Skrivborden väntar på stdin för evigt:** en Team-organisations policy kan stänga av Remote Control vid start. Lägg `"remoteControlAtStartup": true` i `~/.claude/settings.json`.
 - **Starta om servern:** ↻ i toppraden, menyn i Kontrollrummet.app, eller `launchctl kill SIGUSR1 gui/$(id -u)/se.kontrollrummet` på macOS. **Starta om allt:** `launchctl kickstart -k gui/$(id -u)/se.kontrollrummet` på macOS, och `Kontrollrummet.exe --stop` följt av Kontrollrummet i Start-menyn på Windows.
 
 ## Utveckla kontrollrummet

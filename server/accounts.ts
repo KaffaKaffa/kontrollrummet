@@ -43,7 +43,7 @@ function configFile(a: Account) {
   return isStandard(a) ? join(homedir(), '.claude.json') : join(expandHome(a.claudeConfigDir), '.claude.json');
 }
 
-const tilde = (p: string) => (p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
+const tilde = (p: string) => (p.startsWith(homedir()) ? `~${p.slice(homedir().length).replace(/\\/g, '/')}` : p);
 
 /**
  * The first time: every ~/.claude* profile on this Mac, with the one the
