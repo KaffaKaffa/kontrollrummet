@@ -18,6 +18,7 @@ import {
   listTasks,
   updatePlan,
   updateSubtask,
+  type Notice,
   type PrReview,
   type Subtask,
   type SubtaskStatus,
@@ -172,6 +173,8 @@ async function settlePr(s: Subtask): Promise<string> {
     return 'CONFLICTING';
   }
   if (mergeable === 'MERGEABLE') conflicted.delete(s.id);
+  // A "approved, ready to merge" notice has done its job once the PR is merged or closed.
+  if (state === 'MERGED' || state === 'CLOSED') closeNoticesWhere((urls) => urls.length === 1 && urls[0] === s.prUrl);
   if (state === 'MERGED') {
     bus.emit({ type: 'subtask', subtask: updateSubtask(s.id, { status: 'done' }) });
     bus.emit({ type: 'event', event: addEvent(s.id, 'status', `PR #${s.prNumber} är mergad. Kortet är klart.`) });
@@ -180,6 +183,20 @@ async function settlePr(s: Subtask): Promise<string> {
     bus.emit({ type: 'event', event: addEvent(s.id, 'status', `PR #${s.prNumber} stängdes utan merge.`) });
   }
   return state;
+}
+
+/** PR links in a notice's text, GitHub or Azure DevOps. */
+const noticeUrls = (text: string) => text.match(/https:\/\/[^\s)]+\/(?:pull|pullrequest)\/\d+/g) ?? [];
+
+/** Closes the open notices whose PR links satisfy `gone`, and tells the UI. */
+function closeNoticesWhere(gone: (urls: string[], n: Notice) => boolean) {
+  for (const n of listNotices()) {
+    if (n.closedAt) continue;
+    const urls = noticeUrls(n.text);
+    if (!urls.length || !gone(urls, n)) continue;
+    const closed = closeNotice(n.id);
+    if (closed) bus.emit({ type: 'notice', notice: closed });
+  }
 }
 
 /** "Kim" for kim.svensson when the project lists them; the account otherwise. */
@@ -504,6 +521,9 @@ async function checkReviewRequests() {
   const seen = new Set<string>();
   for (const team of loadTeams()) {
     const fresh: string[] = [];
+    // Every PR still waiting for the owner in this team; only trusted when every repo answered.
+    const pending = new Set<string>();
+    let complete = true;
     for (const repo of team.repos) {
       const host = await providerFor(repo.path);
       if (!host) continue;
@@ -520,6 +540,7 @@ async function checkReviewRequests() {
           (p) => !cards.has(p.number),
         );
         next[key] = prs.map((p) => p.url);
+        for (const p of prs) pending.add(p.url);
         for (const p of prs) {
           if (state[key]?.includes(p.url) || seen.has(p.url)) continue;
           seen.add(p.url);
@@ -528,8 +549,12 @@ async function checkReviewRequests() {
       } catch {
         // Offline or signed out: keep what was told, try again next round.
         next[key] = state[key] ?? [];
+        complete = false;
       }
     }
+    // A review notice goes when none of its PRs wait any more: merged, abandoned or voted on.
+    // (Card PRs are left out of `pending` on purpose; their review notices are not sent either.)
+    if (complete) closeNoticesWhere((urls, n) => n.team === team.id && /väntar på din granskning/.test(n.text) && urls.every((u) => !pending.has(u)));
     if (!fresh.length) continue;
     const notice = addNotice(team.id, null, [fresh.length === 1 ? 'En PR väntar på din granskning:' : `${fresh.length} PR:er väntar på din granskning:`, ...fresh].join('\n'));
     bus.emit({ type: 'notice', notice });
