@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DATA_DIR, HOST, PORT, TEAMS_DIR } from './config.ts';
+import * as copilot from './copilot.ts';
 import { generateImage, IMAGE_MODEL, IMAGES_DIR, type GeneratedImage } from './images.ts';
 import { getTeam, type Team } from './roles.ts';
 import { readSecret } from './secrets.ts';
@@ -24,7 +25,7 @@ import { slug } from './worktree.ts';
  * model's strengths. Some are asked over their API by the control room; the
  * rest through an MCP server the asking agent is given.
  */
-export type ApiProvider = 'openai' | 'gemini' | 'grok' | 'perplexity';
+export type ApiProvider = 'openai' | 'gemini' | 'grok' | 'perplexity' | 'copilot';
 export type Provider = ApiProvider | 'runway' | 'elevenlabs' | 'suno' | 'meshy' | 'kling' | 'tripo' | 'rodin' | 'flux' | 'deepl' | 'stability';
 
 export interface Service {
@@ -42,6 +43,7 @@ export const SERVICES: Service[] = [
   { id: 'gemini', label: 'Google Gemini', via: 'api', note: 'Gemini och Nano Banana', kinds: ['text', 'image'] },
   { id: 'grok', label: 'xAI Grok', via: 'api', note: 'Grok och Grok Imagine', kinds: ['text', 'image'] },
   { id: 'perplexity', label: 'Perplexity', via: 'api', note: 'Sonar: svar med webbkällor', kinds: ['text'] },
+  { id: 'copilot', label: 'GitHub Copilot', via: 'api', note: 'Modeller från flera leverantörer via din licens', kinds: ['text'] },
   { id: 'runway', label: 'Runway', via: 'mcp', note: 'Video och bilder', kinds: ['image', 'text'] },
   { id: 'elevenlabs', label: 'ElevenLabs', via: 'mcp', note: 'Röst, musik och ljudeffekter', kinds: ['text', 'image'] },
   { id: 'suno', label: 'Suno', via: 'mcp', note: 'Musik med sång', kinds: ['text', 'image'] },
@@ -102,7 +104,7 @@ const parseTips = (raw: string | undefined): Tip[] =>
 const LIBRARY = join(import.meta.dirname, '..', 'library', 'consultants');
 const PORTRAITS = join(import.meta.dirname, '..', 'web', 'public', 'avatars');
 export const PROVIDERS: Provider[] = SERVICES.map((s) => s.id);
-export const API_PROVIDERS: ApiProvider[] = ['openai', 'gemini', 'grok', 'perplexity'];
+export const API_PROVIDERS: ApiProvider[] = ['openai', 'gemini', 'grok', 'perplexity', 'copilot'];
 export const PROVIDER_LABEL = Object.fromEntries(SERVICES.map((s) => [s.id, s.label])) as Record<Provider, string>;
 /** Where a key is made, opened in the browser when the owner adds one. */
 export const KEY_PAGE: Record<ApiProvider, string> = {
@@ -110,6 +112,8 @@ export const KEY_PAGE: Record<ApiProvider, string> = {
   gemini: 'https://aistudio.google.com/apikey',
   grok: 'https://console.x.ai',
   perplexity: 'https://www.perplexity.ai/account/api/keys',
+  // Fine-grained token with the "Copilot Requests" permission (classic ghp_ tokens do not work).
+  copilot: 'https://github.com/settings/personal-access-tokens/new',
 };
 /** Where each provider's key lives: an environment variable, else the keychain (macOS) or DPAPI (Windows). */
 export const KEY_SERVICE: Record<ApiProvider, { env: string; service: string }> = {
@@ -117,6 +121,7 @@ export const KEY_SERVICE: Record<ApiProvider, { env: string; service: string }> 
   gemini: { env: 'GEMINI_API_KEY', service: 'control-room-gemini' },
   grok: { env: 'XAI_API_KEY', service: 'control-room-grok' },
   perplexity: { env: 'PERPLEXITY_API_KEY', service: 'control-room-perplexity' },
+  copilot: { env: 'COPILOT_GITHUB_TOKEN', service: 'control-room-copilot' },
 };
 
 function keyOf(provider: ApiProvider): string | null {
@@ -346,6 +351,7 @@ export async function listModels(provider: Provider): Promise<string[]> {
   const key = keyOf(provider);
   if (!key) throw new Error(`ingen nyckel för ${PROVIDER_LABEL[provider]}`);
   // Perplexity has no model list to ask; its Sonar models.
+  if (provider === 'copilot') return (await copilot.models(key)).map((m) => m.id);
   if (provider === 'perplexity') return ['sonar', 'sonar-pro', 'sonar-reasoning-pro', 'sonar-deep-research'];
   if (provider === 'grok') {
     const res = await fetch('https://api.x.ai/v1/models', { headers: { authorization: `Bearer ${key}` } });
@@ -372,6 +378,11 @@ export async function listModels(provider: Provider): Promise<string[]> {
 export async function defaultModel(provider: Provider, kind: ConsultantKind): Promise<string> {
   const ids = await listModels(provider);
   if (provider === 'perplexity') return 'sonar-pro';
+  if (provider === 'copilot') {
+    // Not the priciest: a consultant asks often. The newest mid-size model, else the first.
+    const mid = ids.filter((id) => !/mini|nano|haiku|flash|opus|max|pro$|preview/i.test(id));
+    return newest(mid.filter((id) => /gpt|sonnet|gemini/.test(id))) ?? mid[0] ?? ids[0] ?? '';
+  }
   if (provider === 'grok') return kind === 'image' ? (newest(ids.filter((id) => /imag/.test(id))) ?? '') : (newest(ids.filter((id) => /^grok-\d/.test(id) && !/imag|vision|mini|fast/.test(id))) ?? newest(ids.filter((id) => /^grok/.test(id))) ?? '');
   if (provider === 'openai') {
     if (kind === 'image') return newest(ids.filter((id) => /^gpt-image-[\d.]+$/.test(id))) ?? IMAGE_MODEL;
@@ -465,6 +476,20 @@ async function askOpenAi(c: Consultant, question: string, onProgress?: (p: Progr
 }
 
 /** xAI and Perplexity speak OpenAI's chat completions. */
+/** Asks through the Copilot SDK: no tools, an empty directory, a time limit. */
+async function askCopilot(c: Consultant, question: string, token: string, onProgress?: (p: Progress) => void): Promise<{ text: string; meta: string }> {
+  try {
+    const a = await copilot.ask({ token, model: c.model, system: c.instructions, question });
+    if (a.text) onProgress?.({ answer: a.text });
+    return { text: a.text, meta: `${a.model}\t${a.inputTokens}\t${a.outputTokens}\t${a.credits.toFixed(2)}` };
+  } catch (err) {
+    if (err instanceof copilot.CopilotError && err.reason === 'timeout') {
+      throw new Error(`${err.message} (${consultantWho(c)}); fortsätt utan eller förenkla frågan`);
+    }
+    throw err;
+  }
+}
+
 async function askChat(c: Consultant, question: string, url: string, key: string, label: string, onProgress?: (p: Progress) => void): Promise<string> {
   const res = await fetch(url, {
     method: 'POST',
@@ -577,6 +602,7 @@ export async function consult(
   if (!isApi(c.provider)) throw new Error(`${consultantWho(c)} nås via MCP-servern ${c.mcp || '(ingen vald)'}, inte över API`);
   if (!c.model) throw new Error(`${consultantWho(c)} har ingen modell vald (Inställningar → Konsulter)`);
   let answer: Answer;
+  let meta = '';
   if (c.kind === 'image') {
     if (c.provider === 'grok') {
       answer = { text: '', images: [saveImage(teamId, `${c.id}-${question}`, await grokImage(c, question), opts.saveTo, opts.worktree)] };
@@ -605,7 +631,13 @@ export async function consult(
       return k;
     };
     const text =
-      c.provider === 'gemini'
+      c.provider === 'copilot'
+        ? await (async () => {
+            const got = await askCopilot(c, question, key('copilot'), opts.onProgress);
+            meta = got.meta;
+            return got.text;
+          })()
+        : c.provider === 'gemini'
         ? (await askGemini(c, question, opts.onProgress)).text
         : c.provider === 'grok'
           ? await askChat(c, question, 'https://api.x.ai/v1/chat/completions', key('grok'), 'xAI', opts.onProgress)
@@ -616,7 +648,7 @@ export async function consult(
     answer = { text, images: [] };
   }
   try {
-    writeFileSync(LOG, `${new Date().toISOString()}\t${teamId}\t${c.id}\t${c.provider}/${c.model}\t${question.slice(0, 200).replace(/\s+/g, ' ')}\n`, { flag: 'a' });
+    writeFileSync(LOG, `${new Date().toISOString()}\t${teamId}\t${c.id}\t${c.provider}/${c.model}\t${question.slice(0, 200).replace(/\s+/g, ' ')}${meta ? `\t${meta}` : ''}\n`, { flag: 'a' });
   } catch {
     // The log is for looking back, never in the way.
   }

@@ -24,6 +24,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   gemini: 'Google Gemini',
   grok: 'xAI Grok',
   perplexity: 'Perplexity',
+  copilot: 'GitHub Copilot',
   runway: 'Runway',
   elevenlabs: 'ElevenLabs',
   suno: 'Suno',
@@ -71,6 +72,7 @@ const SERVICE: Record<string, string> = {
   rodin: 'Rodin',
   deepl: 'DeepL',
   perplexity: 'Perplexity',
+  copilot: 'GitHub Copilot',
   stability: 'Stability',
 };
 const USABLE = new Set<string>(Object.keys(PROVIDER_LABEL));

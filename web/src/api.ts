@@ -550,7 +550,7 @@ export async function post(path: string, body: unknown = {}): Promise<unknown> {
   return data;
 }
 
-export type ConsultantProvider = 'openai' | 'gemini' | 'grok' | 'perplexity' | 'runway' | 'elevenlabs' | 'suno' | 'meshy' | 'kling' | 'tripo' | 'rodin' | 'flux' | 'deepl' | 'stability';
+export type ConsultantProvider = 'openai' | 'gemini' | 'grok' | 'perplexity' | 'copilot' | 'runway' | 'elevenlabs' | 'suno' | 'meshy' | 'kling' | 'tripo' | 'rodin' | 'flux' | 'deepl' | 'stability';
 
 /** A specialist outside the office, asked over an API: a lawyer, an illustrator. */
 export interface Consultant {
