@@ -95,6 +95,7 @@ Claude kontrollerar och installerar det som saknas, installerar Kontrollrummet m
 - `gh`, inloggat mot GitHub, eller `az` för Azure DevOps. Agenterna pushar och öppnar PR:er med dem.
 - Valfritt:
   - API-nycklar till OpenAI (porträtt, loggor, konsulter) och Google Gemini (konsulter). Läggs in under Inställningar → Konsulter → API-nycklar: knappen öppnar sidan där nyckeln skapas och ett terminalfönster där du klistrar in den
+  - GitHub Copilot som konsultleverantör (modeller från flera leverantörer via din licens): en fine-grained token med behörigheten "Copilot Requests" (inte en klassisk `ghp_`) under Inställningar → Konsulter → API-nycklar, sparad i nyckelringen eller krypterad på Windows. Copilot CLI följer med som ett låst beroende och uppdaterar sig inte. Utan token är leverantören avstängd. Gäller licensen en organisation: kolla först med den som ansvarar för den vilka modeller och vilken kod som får gå till GitHub och vidare till leverantörerna
   - App Store Connect-, Play- och Partner Center-nycklar för Releases
   - Parallels för Windows-tester från en Mac
 
@@ -313,7 +314,7 @@ Prompten byggs i den här ordningen: `shared.md` i roten (gäller alla team), te
 ### Konsulter
 - Läggs till under Inställningar → Konsulter, från mallarna i `library/consultants` (jurist, illustratör, copywriter, översättare, SEO, tillgänglighet, säkerhetstestare, ekonom, musik, video, 3D med flera) eller från början. De sparas i `teams/<id>/consultants/<id>.md`: front matter, sedan instruktionerna.
 - Varje konsult har ett namn, ett porträtt, vad man frågar den om, en tjänst och modell, och egna instruktioner. Mallen tipsar om vilka tjänster som är bra på just det.
-- **Över API** (OpenAI, Gemini, Grok, Perplexity): kontrollrummet ställer frågan och lämnar svaret till agenten. Textkonsulter kan få söka på webben, och bilder sparas, visas på kortet och kan kopieras in i worktreen.
+- **Över API** (OpenAI, Gemini, Grok, Perplexity, GitHub Copilot): kontrollrummet ställer frågan och lämnar svaret till agenten. Textkonsulter kan få söka på webben, och bilder sparas, visas på kortet och kan kopieras in i worktreen.
 - **Via MCP** (till exempel Runway, ElevenLabs, Suno, Meshy): agenten får tjänstens MCP-server och använder dess verktyg med konsultens instruktioner.
 - Agenterna frågar med `consult`. Konsulten ser inte repot eller kortet, så frågan ska bära allt den behöver veta, och inga personuppgifter, kunddata eller hemligheter.
 - **Vem som får fråga:** alla, eller valda roller. Andra får be någon av dem med `delegate`.
