@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Linked } from './links.tsx';
+import { Lightbox } from './gallery.tsx';
+import { When } from './when.tsx';
 import { avatarUrl, awaitsReview, nameOf, post, reviewText, type AgentEvent, type Approval, type Role, type Subtask, type SubtaskStatus } from './api.ts';
 
 export const STATUS_LABEL: Record<SubtaskStatus, string> = {
@@ -167,13 +169,17 @@ export function CardRow({
 }
 
 /** The conversation: the agent's words as bubbles, its tools as quiet lines, its pictures inline. */
-export function Log({ events, team, role }: { events: Pick<AgentEvent, 'id' | 'kind' | 'body'>[]; team: string; role?: Role }) {
+export function Log({ events, team, role }: { events: Pick<AgentEvent, 'id' | 'kind' | 'body' | 'at'>[]; team: string; role?: Role }) {
   const ref = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   useLayoutEffect(() => {
     const el = ref.current;
     if (el && pinned.current) el.scrollTop = el.scrollHeight;
   }, [events.length]);
+  // Every picture on the card, so the lightbox pages through them all.
+  const images = events.filter((e) => e.kind === 'image');
+  const pictures = images.map((e) => ({ src: e.body.replace(/^https?:\/\/[^/]+/, ''), name: decodeURIComponent(e.body.split('/').pop() ?? 'Bild') }));
+  const [viewing, setViewing] = useState<number | null>(null);
   return (
     <div
       className="log"
@@ -194,12 +200,15 @@ export function Log({ events, team, role }: { events: Pick<AgentEvent, 'id' | 'k
             const from = /^\[([^\]]+)\]\s*/.exec(e.body);
             return from ? (
               <div key={e.id} className="bubble bubble-system">
-                <span className="bubble-from">{from[1]}</span>
+                <span className="bubble-from">
+                  {from[1]} <When at={e.at} />
+                </span>
                 <Linked text={e.body.slice(from[0].length)} />
               </div>
             ) : (
               <div key={e.id} className="bubble bubble-user">
                 <Linked text={e.body} />
+                <When at={e.at} className="when-below" />
               </div>
             );
           }
@@ -209,15 +218,18 @@ export function Log({ events, team, role }: { events: Pick<AgentEvent, 'id' | 'k
                 <Avatar team={team} role={role} size="sm" />
                 <div className="bubble bubble-agent">
                   <Linked text={e.body} />
+                  <When at={e.at} className="when-below" />
                 </div>
               </div>
             );
-          case 'image':
+          case 'image': {
+            const i = images.indexOf(e);
             return (
-              <a key={e.id} className="log-image" href={e.body} target="_blank" rel="noreferrer">
-                <img src={e.body.replace(/^https?:\/\/[^/]+/, '')} alt="Genererad bild" loading="lazy" />
-              </a>
+              <button key={e.id} type="button" className="log-image" onClick={() => setViewing(i)}>
+                <img src={pictures[i].src} alt="Bild på kortet" loading="lazy" />
+              </button>
             );
+          }
           case 'tool':
             return (
               <div key={e.id} className="log-line log-tool">
@@ -231,10 +243,12 @@ export function Log({ events, team, role }: { events: Pick<AgentEvent, 'id' | 'k
                 <span className="log-body">
                   <Linked text={e.body} />
                 </span>
+                {(e.kind === 'status' || e.kind === 'error') && <When at={e.at} className="when-line" />}
               </div>
             );
         }
       })}
+      {viewing != null && <Lightbox pictures={pictures} start={viewing} onClose={() => setViewing(null)} />}
     </div>
   );
 }
@@ -435,7 +449,8 @@ export function ApprovalCard({ approval, role, team }: { approval: Approval; rol
       <Avatar team={team} role={role} size="sm" />
       <div className="approval-main">
         <p>
-          <strong>{nameOf(role) ?? (approval.conversationId ? 'Gudfadern' : 'En agent')}</strong> vill köra <code>{approval.tool}</code>
+          <strong>{nameOf(role) ?? (approval.conversationId ? 'Gudfadern' : 'En agent')}</strong> {approval.denied ? 'nekades att köra' : 'vill köra'}{' '}
+          <code>{approval.tool}</code>
           {approval.subtaskId != null ? (
             <>
               {' '}
@@ -449,12 +464,14 @@ export function ApprovalCard({ approval, role, team }: { approval: Approval; rol
           ) : null}
         </p>
         <pre className="approval-what">{approval.summary}</pre>
+        <When at={approval.at} />
+        {approval.denied && <p className="approval-why">{approval.denied} Tillåter du det gäller det för kortet framåt, och agenten kör det igen.</p>}
         <div className="approval-actions">
           <button type="button" className="btn btn-primary" onClick={decide(true)} disabled={busy}>
-            Godkänn
+            {approval.denied ? 'Tillåt och kör om' : 'Godkänn'}
           </button>
           <button type="button" className="btn" onClick={decide(false)} disabled={busy}>
-            Neka
+            {approval.denied ? 'Låt bli' : 'Neka'}
           </button>
         </div>
       </div>

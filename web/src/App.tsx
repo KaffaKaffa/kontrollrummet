@@ -1,9 +1,11 @@
-import { ConsultantDesk, ConsultantFaces } from './consultants.tsx';
+import { ConsultantDesk, ConsultantFaces, ConsultantPanel } from './consultants.tsx';
 import { Component, lazy, Suspense, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { DevAppButtons } from './devapps.tsx';
 import { awaitsReview, calledOr, nameOf, reviewText, post, useBoard, type Account, type Board, type Notice, type OwnPr, type Plan, type PlanStatus, type Role, type Subtask, type Team, type Usage } from './api.ts';
 import { Markdown } from './markdown.tsx';
-import { Linked } from './links.tsx';
+import { Linked, linkify } from './links.tsx';
+import { lineSettled } from '../../server/notice-refs.ts';
+import { When } from './when.tsx';
 import { AgentSettings, Modal } from './settings.tsx';
 import { Godfather } from './godfather.tsx';
 import { Logo, NewProjectGuide, ProjectSettings } from './project.tsx';
@@ -16,7 +18,8 @@ import { ApprovalCard, Avatar, CardDetail, CardRow, Composer, Log, LoginPrompt, 
 
 /**
  * The view lives in the URL hash, so a card can be bookmarked or sent:
- * #/<team>/office, #/<team>/office/card/12, #/<team>/office/agent/ios, #/<team>/plans/3.
+ * #/<team>/office, #/<team>/office/card/12, #/<team>/office/agent/ios,
+ * #/<team>/office/consultant/jurist, #/<team>/plans/3.
  * Old #/<team>/board/12 links still open card 12.
  */
 function useRoute() {
@@ -27,15 +30,16 @@ function useRoute() {
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
   }, []);
-  if (route[0] === 'new') return { team: null, view: 'new', planId: null, cardId: null, agentId: null, conversationId: null } as const;
+  if (route[0] === 'new') return { team: null, view: 'new', planId: null, cardId: null, agentId: null, consultantId: null, conversationId: null } as const;
   // #/gudfadern and #/gudfadern/<conversation> belong to no team.
   if (route[0] === 'gudfadern')
-    return { team: null, view: 'gudfadern', planId: null, cardId: null, agentId: null, conversationId: route[1] ? Number(route[1]) : null } as const;
+    return { team: null, view: 'gudfadern', planId: null, cardId: null, agentId: null, consultantId: null, conversationId: route[1] ? Number(route[1]) : null } as const;
   const view = route[1] === 'plans' ? 'plans' : route[1] === 'releases' ? 'releases' : route[1] === 'settings' ? 'settings' : 'office';
   const cardId =
     route[2] === 'card' ? Number(route[3]) : route[1] === 'board' && route[2] ? Number(route[2]) : null;
   const agentId = route[2] === 'agent' ? (route[3] ?? null) : null;
-  return { team: route[0] || null, view, planId: view === 'plans' && route[2] ? Number(route[2]) : null, cardId, agentId, conversationId: null } as const;
+  const consultantId = route[2] === 'consultant' ? (route[3] ?? null) : null;
+  return { team: route[0] || null, view, planId: view === 'plans' && route[2] ? Number(route[2]) : null, cardId, agentId, consultantId, conversationId: null } as const;
 }
 
 /** One team's slice of the board: its roles, its tasks, its cards. */
@@ -422,9 +426,7 @@ function Inbox({ board }: { board: TeamBoard }) {
             ) : (
               <div className="notice">
                 <Avatar team={board.team.id} role={role} size="sm" />
-                <p>
-                  <Linked text={n.text} />
-                </p>
+                <NoticeBody notice={n} board={board} />
               </div>
             )}
             <NoticeActions notice={n} team={board.team.id} card={from} name={nameOf(role)} />
@@ -432,6 +434,54 @@ function Inbox({ board }: { board: TeamBoard }) {
         );
       })}
     </section>
+  );
+}
+
+const CARD_REF = /(?<![\w/]|PR\s?|PR)#(\d+)\b/g;
+
+/**
+ * A notice line by line. A line whose cards or PRs have all moved on since the
+ * notice was written (done, merged) is struck out with "klart", so a list of
+ * three things shows which one is left. Card numbers link to the card, with
+ * where it stands now.
+ */
+function NoticeBody({ notice, board }: { notice: Notice; board: TeamBoard }) {
+  const cards = new Map(board.subtasks.map((s) => [s.id, s]));
+  const roles = new Map(board.roles.map((r) => [r.id, r]));
+  const own = notice.subtaskId != null;
+  // Only a card's own notice names cards; a review list's "#52" is someone's PR.
+  const withCards = (part: string, key: number): ReactNode[] => {
+    const out: ReactNode[] = [];
+    let last = 0;
+    for (const m of part.matchAll(CARD_REF)) {
+      const card = own ? cards.get(Number(m[1])) : undefined;
+      if (!card) continue;
+      if (m.index > last) out.push(part.slice(last, m.index));
+      out.push(
+        <a key={`${key}-${m.index}`} className="card-ref" href={`#/${board.team.id}/office/card/${card.id}`} title={`Kort #${card.id}, ${nameOf(roles.get(card.agent)) ?? card.agent}`}>
+          #{card.id}
+          <StatusBadge status={shownStatus(card, board.subtasks)} />
+        </a>,
+      );
+      last = m.index + m[0].length;
+    }
+    if (last < part.length) out.push(part.slice(last));
+    return out;
+  };
+  const lines = notice.text.split('\n');
+  return (
+    <div className="notice-body">
+      <When at={notice.at} />
+      {lines.map((line, i) => {
+        const done = own && lineSettled(line, board.subtasks, notice.at);
+        return (
+          <p key={i} className={done ? 'notice-line is-settled' : 'notice-line'}>
+            {line ? linkify(line, withCards) : '\u00a0'}
+            {done && <span className="notice-done">klart</span>}
+          </p>
+        );
+      })}
+    </div>
   );
 }
 
@@ -764,11 +814,13 @@ function Office({
   loadEvents,
   cardId,
   agentId,
+  consultantId,
 }: {
   board: TeamBoard;
   loadEvents: (id: number) => Promise<void>;
   cardId: number | null;
   agentId: string | null;
+  consultantId: string | null;
 }) {
   // Who is busy comes first: working, then waiting for the owner, then the rest; idle desks last.
   const busy = (r: Role) => {
@@ -781,6 +833,7 @@ function Office({
   };
   const roles = [...board.roles].sort((a, b) => busy(a) - busy(b) || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
   const agent = agentId ? board.roles.find((r) => r.id === agentId) : undefined;
+  const consultant = consultantId ? (board.consultants[board.team.id] ?? []).find((c) => c.id === consultantId) : undefined;
   const [mode, setMode] = useOfficeMode();
   const approvals = useMemo(() => board.approvals.filter((a) => a.team === board.team.id), [board.approvals, board.team.id]);
   const [boardWidth, setBoardWidth] = useBoardWidth();
@@ -792,7 +845,7 @@ function Office({
       <BoardResizer width={boardWidth} onWidth={setBoardWidth} />
       <div className="office-main">
         <div className="office-bar">
-          {mode === '3d' ? <ConsultantFaces list={board.consultants[board.team.id] ?? []} team={board.team.id} /> : <span />}
+          {mode === '3d' ? <ConsultantFaces list={board.consultants[board.team.id] ?? []} team={board.team.id} consultations={board.consultations} /> : <span />}
         <div className="segmented office-mode" role="tablist" aria-label="Visa kontoret som">
           <button type="button" role="tab" aria-selected={mode === 'desks'} onClick={() => setMode('desks')}>
             Skrivbord
@@ -821,13 +874,18 @@ function Office({
               <Desk key={r.id} role={r} board={board} index={i} loadEvents={loadEvents} life={life} />
             ))}
             {(board.consultants[board.team.id] ?? []).map((c) => (
-              <ConsultantDesk key={`c-${c.id}`} c={c} team={board.team.id} roles={board.roles} />
+              <ConsultantDesk key={`c-${c.id}`} c={c} team={board.team.id} roles={board.roles} consultations={board.consultations} />
             ))}
           </div>
         )}
       </div>
       {cardId != null && <CardDrawer board={board} id={cardId} loadEvents={loadEvents} />}
       {agent && <AgentSettings key={agent.id} team={board.team} role={agent} onClose={() => (location.hash = `#/${board.team.id}/office`)} />}
+      {consultant && (
+        <Modal label={consultant.name} onClose={() => (location.hash = `#/${board.team.id}/office`)} drawer>
+          <ConsultantPanel c={consultant} team={board.team.id} roles={board.roles} consultations={board.consultations} onClose={() => (location.hash = `#/${board.team.id}/office`)} />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -1179,7 +1237,7 @@ export function App() {
         ) : view === 'releases' ? (
           <Releases team={teamBoard.team.id} jobs={teamBoard.jobs} />
         ) : (
-          <Office board={teamBoard} loadEvents={loadEvents} cardId={route.cardId} agentId={route.agentId} />
+          <Office board={teamBoard} loadEvents={loadEvents} cardId={route.cardId} agentId={route.agentId} consultantId={route.consultantId} />
         )}
         </ViewBoundary>
       </main>

@@ -65,7 +65,8 @@ export interface Worktree {
 /**
  * One worktree and one branch per card, cut from the team's base branch on
  * origin, so two cards never share a working copy. An existing worktree for the
- * card is reused: a card resumed after a restart picks up where it was.
+ * card is reused: a card resumed after a restart picks up where it was. One
+ * removed after the card was done is made again from the card's branch.
  */
 export async function ensureWorktree(team: Team, repo: RepoInfo, subtaskId: number, agent: string, title: string): Promise<Worktree> {
   const name = `cr-${subtaskId}-${agent}-${slug(title)}`.slice(0, 60).replace(/-+$/g, '');
@@ -78,11 +79,38 @@ export async function ensureWorktree(team: Team, repo: RepoInfo, subtaskId: numb
   // Worktrees never show up as changes in the checkout: kept out through the
   // repo's own, never committed ignore list (.git/info/exclude), not .gitignore.
   setExcluded(repo.path, '/.claude/worktrees/', true);
-  await run('git', ['worktree', 'add', '--no-track', '-b', branch, path, `origin/${repo.baseBranch}`], {
+  // A worktree removed after the card was done (removeWorktree) comes back on its own branch.
+  await run('git', ['worktree', 'prune'], { cwd: repo.path });
+  const exists = await run('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { cwd: repo.path }).then(
+    () => true,
+    () => false,
+  );
+  await run('git', exists ? ['worktree', 'add', path, branch] : ['worktree', 'add', '--no-track', '-b', branch, path, `origin/${repo.baseBranch}`], {
     cwd: repo.path,
   });
   linkLocalSkills(repo.path, path);
   // Several repos under one folder: the folder's own local skills too.
   if (team.repo !== repo.path) linkLocalSkills(team.repo, path);
   return { path, branch };
+}
+
+/** Folders a card's worktree is in: made by ensureWorktree, never a hand-made one (release, demo). */
+export const isCardWorktree = (path: string) => /[/\\]\.claude[/\\]worktrees[/\\]cr-\d+-/.test(path);
+
+/**
+ * Removes a done card's worktree to give the disk back (node_modules, Pods,
+ * builds: gigabytes each). The branch stays, so the card can be picked up again.
+ * Git refuses when anything in it is changed or untracked, and then it stays:
+ * nothing that is not in git is ever thrown away.
+ */
+export async function removeWorktree(path: string): Promise<boolean> {
+  if (!isCardWorktree(path) || !existsSync(path)) return false;
+  try {
+    // From the main checkout: a worktree is not removed from inside itself.
+    const repo = path.replace(/[/\\]\.claude[/\\]worktrees[/\\].*$/, '');
+    await run('git', ['worktree', 'remove', path], { cwd: repo });
+    return true;
+  } catch {
+    return false;
+  }
 }

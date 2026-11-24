@@ -1,13 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { LocalLink } from './gallery.tsx';
 
 /**
  * Text from agents with its links made usable: a Figma link shows as the
  * file's name behind Figma's logo, a GitHub PR as "PR #123", anything else as
- * a plain link. Markdown links ([title](url)) keep their title. Built as React
+ * a plain link, a file:// link as the folder or picture with thumbnails.
+ * Markdown links ([title](url)) keep their title. Built as React
  * elements, never HTML.
  */
 
-const LINK = /\[([^\]\n]{1,200})\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()"'`]+[^\s<>()"'`.,;:!?])/g;
+const LINK = /\[([^\]\n]{1,200})\]\(((?:https?|file):\/\/[^\s)]+)\)|((?:https?|file):\/\/[^\s<>()"'`]+[^\s<>()"'`.,;:!?])/g;
 
 function FigmaLogo() {
   return (
@@ -78,6 +80,16 @@ function link(href: string, title: string | null, key: number): ReactNode {
     url = new URL(href);
   } catch {
     return href;
+  }
+  // A folder or picture on this Mac: its name, Finder, and the pictures as thumbnails.
+  if (url.protocol === 'file:') {
+    let path = url.pathname;
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      // keep it as written
+    }
+    return <LocalLink key={key} path={path} title={title} />;
   }
   const common = { key, href, target: '_blank', rel: 'noreferrer' } as const;
   if (/(^|\.)figma\.com$/.test(url.hostname)) {

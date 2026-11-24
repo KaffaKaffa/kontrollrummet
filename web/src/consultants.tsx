@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { post, put, type Consultant, type ConsultantProvider, type Role, type Team } from './api.ts';
+import { Markdown } from './markdown.tsx';
+import { When } from './when.tsx';
+import { nameOf, post, put, type Consultant, type Consultation, type ConsultantProvider, type Role, type Team } from './api.ts';
 import { Section, useAction } from './project.tsx';
 
 /**
@@ -117,19 +119,13 @@ const CONSENT_LABEL: Record<Consultant['consent'], string> = {
 };
 
 /** A consultant at a desk like the agents', in the desk view: not in the office, but in the same grid. */
-export function ConsultantDesk({ c, team, roles }: { c: Consultant; team: string; roles: Role[] }) {
+export function ConsultantDesk({ c, team, roles, consultations = [] }: { c: Consultant; team: string; roles: Role[]; consultations?: Consultation[] }) {
   const askers = c.askers === 'all' ? 'Alla får fråga' : `Frågas av ${c.askers.map((id) => roles.find((r) => r.id === id)).filter(Boolean).map((r) => r!.nick || r!.name).join(', ') || 'ingen'}`;
+  const now = activeFor(c, team, consultations);
+  const asker = now ? roles.find((r) => r.id === now.asker) : undefined;
   return (
-    <section className="desk desk-idle desk-consultant" aria-label={consultantName(c)}>
-      <a
-        className="desk-top"
-        href={`#/${team}/settings`}
-        onClick={(e) => {
-          e.preventDefault();
-          openConsultants(team);
-        }}
-        title={`Inställningar för ${consultantName(c)}`}
-      >
+    <section className={`desk ${now ? 'desk-running' : 'desk-idle'} desk-consultant`} aria-label={consultantName(c)}>
+      <a className="desk-top" href={`#/${team}/office/consultant/${c.id}`} title={`Öppna ${consultantName(c)}`}>
         <ConsultantFace c={c} size="xl" />
         <div className="desk-who">
           <h2>{consultantName(c)}</h2>
@@ -139,10 +135,23 @@ export function ConsultantDesk({ c, team, roles }: { c: Consultant; team: string
           </p>
         </div>
       </a>
-      <div className="speech speech-idle">{c.kind === 'image' ? 'Ritar när någon beställer.' : 'Svarar när någon frågar.'}{c.web ? ' Söker på webben.' : ''}</div>
+      {now ? (
+        <div className="speech">
+          {c.kind === 'image' ? 'Ritar' : 'Svarar'} {nameOf(asker) ?? now.asker}
+          {now.subtaskId != null && (
+            <>
+              {' '}
+              på <a href={`#/${team}/office/card/${now.subtaskId}`}>#{now.subtaskId}</a>
+            </>
+          )}
+          …
+        </div>
+      ) : (
+        <div className="speech speech-idle">{c.kind === 'image' ? 'Ritar när någon beställer.' : 'Svarar när någon frågar.'}{c.web ? ' Söker på webben.' : ''}</div>
+      )}
       {c.vibe && <p className="desk-vibe">{c.vibe}</p>}
       <footer className="desk-foot">
-        <span className="badge">Konsult</span>
+        <span className={now ? 'badge badge-running' : 'badge'}>{now ? 'Arbetar' : 'Konsult'}</span>
         <span className="desk-stat">{askers}</span>
         <span className="desk-stat">{CONSENT_LABEL[c.consent]}</span>
       </footer>
@@ -151,16 +160,135 @@ export function ConsultantDesk({ c, team, roles }: { c: Consultant; team: string
 }
 
 /** In the 3D office the consultants are only faces, on the row with the view switch. */
-export function ConsultantFaces({ list, team }: { list: Consultant[]; team: string }) {
+export function ConsultantFaces({ list, team, consultations = [] }: { list: Consultant[]; team: string; consultations?: Consultation[] }) {
   if (!list.length) return null;
   return (
     <div className="consultant-faces" aria-label="Konsulter">
-      {list.map((c) => (
-        <button key={c.id} type="button" className="consultant-face-btn" title={`${consultantName(c)}${c.nick ? ` (${c.name})` : ''}: ${c.title}`} onClick={() => openConsultants(team)}>
-          <ConsultantFace c={c} size="md" />
-        </button>
-      ))}
+      {list.map((c) => {
+        const busy = Boolean(activeFor(c, team, consultations));
+        return (
+          <a
+            key={c.id}
+            className={busy ? 'consultant-face-btn is-busy' : 'consultant-face-btn'}
+            href={`#/${team}/office/consultant/${c.id}`}
+            title={`${consultantName(c)}${c.nick ? ` (${c.name})` : ''}: ${c.title}${busy ? ' · arbetar' : ''}`}
+          >
+            <ConsultantFace c={c} size="md" />
+          </a>
+        );
+      })}
     </div>
+  );
+}
+
+/** The question the consultant is working on now, if any. */
+const activeFor = (c: Consultant, team: string, list: Consultation[]) =>
+  list.findLast((x) => x.team === team && x.consultant === c.id && x.status === 'running');
+
+const seconds = (from: string, to: string | null) => Math.max(0, Math.round(((to ? Date.parse(to) : Date.now()) - Date.parse(from)) / 1000));
+const took = (s: number) => (s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`);
+
+/** Ticks once a second while something runs, for "har tänkt i 42 s". */
+function useTick(on: boolean) {
+  const [, set] = useState(0);
+  useEffect(() => {
+    if (!on) return;
+    const t = setInterval(() => set((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [on]);
+}
+
+/**
+ * A consultant in the side panel, like an agent's card: who it is, whether it
+ * works right now, and its latest questions with how it reasoned, what it
+ * searched and read, and what it answered. Live while a question runs.
+ */
+export function ConsultantPanel({ c, team, roles, consultations, onClose }: { c: Consultant; team: string; roles: Role[]; consultations: Consultation[]; onClose: () => void }) {
+  const mine = consultations.filter((x) => x.team === team && x.consultant === c.id).reverse();
+  const now = mine.find((x) => x.status === 'running');
+  useTick(Boolean(now));
+  return (
+    <section className="detail consultant-panel" aria-label={consultantName(c)}>
+      <header className="detail-head">
+        <ConsultantFace c={c} size="lg" />
+        <div className="detail-title">
+          <p className="eyebrow">
+            Konsult · {PROVIDER_LABEL[c.provider] ?? c.provider} {c.mcp ? 'via MCP' : c.model}
+          </p>
+          <h2>{consultantName(c)}</h2>
+          <span className={now ? 'badge badge-running' : 'badge'}>{now ? 'Arbetar' : 'Ledig'}</span>
+        </div>
+        <button type="button" className="btn btn-quiet" onClick={() => openConsultants(team)}>
+          Inställningar
+        </button>
+        <button type="button" className="icon-btn" onClick={onClose} aria-label="Stäng" title="Stäng (Esc)">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+          </svg>
+        </button>
+      </header>
+      <div className="log consultations">
+        {mine.length === 0 && <p className="log-empty">{c.mcp ? 'Den här konsulten nås via MCP, så agenten använder dess verktyg själv och inget syns här.' : 'Ingen har frågat än.'}</p>}
+        {mine.map((x) => {
+          const who = roles.find((r) => r.id === x.asker);
+          const running = x.status === 'running';
+          return (
+            <article key={x.id} className={`consultation is-${x.status}`}>
+              <p className="consultation-head">
+                <strong>{nameOf(who) ?? x.asker}</strong>
+                {x.subtaskId != null && (
+                  <>
+                    {' '}
+                    på <a href={`#/${team}/office/card/${x.subtaskId}`}>kort #{x.subtaskId}</a>
+                  </>
+                )}{' '}
+                · <When at={x.startedAt} /> · {running ? `har arbetat i ${took(seconds(x.startedAt, null))}` : `tog ${took(seconds(x.startedAt, x.endedAt))}`}
+              </p>
+              <details className="consultation-part">
+                <summary>Frågan</summary>
+                <div className="consultation-text">{x.question}</div>
+              </details>
+              {(x.thinking || running) && (
+                <details className="consultation-part" open={running}>
+                  <summary>Resonemang{running && !x.answer ? ' …' : ''}</summary>
+                  {x.thinking ? <Markdown source={x.thinking} /> : <p className="settings-muted">Tjänsten visar inget resonemang för den här modellen, bara svaret.</p>}
+                </details>
+              )}
+              {x.searches.length > 0 && (
+                <details className="consultation-part">
+                  <summary>Sökte på webben ({x.searches.length})</summary>
+                  <ul>
+                    {x.searches.map((q) => (
+                      <li key={q}>{q}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {x.sources.length > 0 && (
+                <details className="consultation-part">
+                  <summary>Källor ({x.sources.length})</summary>
+                  <ul>
+                    {x.sources.map((src) => (
+                      <li key={src.url}>
+                        <a href={src.url} target="_blank" rel="noreferrer">
+                          {src.title || src.url}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {x.answer && (
+                <div className="consultation-answer">
+                  <Markdown source={x.answer} />
+                </div>
+              )}
+              {x.error && <p className="consultation-error">{x.error}</p>}
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

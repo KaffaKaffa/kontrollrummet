@@ -24,6 +24,8 @@ import {
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
+import { localImages, reveal, serveLocalImage } from './local-files.ts';
+import { listConsultations } from './consultations.ts';
 import { basename, dirname, extname, join, normalize, resolve } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { APP_ROOT, CLAUDE_BIN, DEV, HOST, MAX_CONCURRENT, PORT, TEAMS_DIR, WEB_DIST, expandHome } from './config.ts';
@@ -119,7 +121,7 @@ import { delegateReview, planAction, submitTask, type PlanAction } from './actio
 import { handleDesk } from './desk.ts';
 import { getReleases } from './releases.ts';
 import { deployProd, deployTest, listJobs, prodPreview, releaseApproved } from './deploy.ts';
-import { checkPrNow, ownPrs } from './watch.ts';
+import { checkPrNow, closerLookNow, ownerWroteTo, ownPrs } from './watch.ts';
 import { figmaTitle } from './figma.ts';
 import { runningCount, startAgent, stopAgent, stopAll } from './agent.ts';
 import { startScheduler } from './orchestrator.ts';
@@ -192,6 +194,7 @@ function state() {
     limits: { maxAgents: MAX_CONCURRENT, running: runningCount() },
     accounts: accountsView(),
     approvals: listApprovals(),
+    consultations: listConsultations(),
     notices: listNotices(),
     locks: lockHolders(),
     lockQueues: lockQueues(),
@@ -233,6 +236,19 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
     } catch (err) {
       throw new HttpError(400, `kan inte läsa ${dir}: ${(err as Error).message}`);
     }
+  }
+
+  // Pictures behind an agent's file:// link: a folder of screenshots or one image.
+  if (req.method === 'GET' && path === '/api/local-images') {
+    const p = new URL(req.url ?? '/', 'http://x').searchParams.get('path') ?? '';
+    const found = localImages(expandHome(p));
+    if (!found) throw new HttpError(404, 'inga bilder där');
+    return json(res, 200, found);
+  }
+  if (req.method === 'POST' && path === '/api/reveal') {
+    const body = await readJson(req);
+    if (!reveal(expandHome(text(body, 'path')))) throw new HttpError(404, 'finns inte');
+    return json(res, 200, {});
   }
 
   if (req.method === 'POST' && path === '/api/restart') {
@@ -699,7 +715,7 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
     return json(res, 200, {});
   }
 
-  const m = /^\/api\/subtasks\/(\d+)\/(events|messages|stop|done|terminal|merged|login|upload)$/.exec(path);
+  const m = /^\/api\/subtasks\/(\d+)\/(events|messages|stop|done|terminal|merged|login|upload|closer-look)$/.exec(path);
   if (m) {
     const id = Number(m[1]);
     const subtask = getSubtask(id);
@@ -711,6 +727,8 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
     if (req.method === 'POST' && action === 'messages') {
       const body = await readJson(req);
       // A message from the owner starts the agent even at the cap: it is asked for, not scheduled.
+      // The card's lead did not see this conversation; it hears what came of it when the turn ends.
+      ownerWroteTo(id);
       await startAgent(id, text(body, 'text'));
       // Pasted images, on the card after the message: the agent reads them by their paths in the text.
       for (const url of Array.isArray(body.images) ? body.images : []) {
@@ -728,6 +746,14 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
       const updated = updateSubtask(id, { status: 'done' });
       bus.emit({ type: 'subtask', subtask: updated });
       return json(res, 200, updated);
+    }
+    if (req.method === 'POST' && action === 'closer-look') {
+      await readJson(req);
+      try {
+        return json(res, 201, await closerLookNow(id));
+      } catch (err) {
+        throw new HttpError(409, (err as Error).message);
+      }
     }
     if (req.method === 'POST' && action === 'merged') {
       await readJson(req);
@@ -860,6 +886,7 @@ const server = createServer((req, res) => {
     return;
   }
   if (url.pathname.startsWith('/images/')) return serveImage(res, url.pathname);
+  if (url.pathname === '/local-image') return serveLocalImage(res, url.searchParams.get('path') ?? '');
   // Portraits, 3D characters and office furniture are added while the server runs
   // (a new agent, scripts/characters.mjs), so they are read from the source, not the build.
   const live = /^\/(avatars|characters|office)\//.exec(url.pathname);

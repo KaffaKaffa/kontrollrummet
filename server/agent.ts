@@ -1,16 +1,17 @@
 import { consultantServers, consultantsSection } from './consultants.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from './proc.ts';
 import { createInterface } from 'node:readline';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { CLAUDE_BIN, MAX_CONCURRENT, PORT } from './config.ts';
 import { pauseLeft, pauseUntil, readRateLimitEvent } from './usage.ts';
-import { NEVER, claudeEnv, contextOf, describeTool, toolResultText, userLine } from './claude-run.ts';
-import { issueToken, releaseLocks, revokeToken, takeReport, toolGuide } from './mcp.ts';
+import { CONTROL_ROOM_TOOL_MS, claudeEnv, contextOf, describeTool, toolResultText, userLine } from './claude-run.ts';
+import { issueToken, releaseLocks, reportDenial, revokeToken, takeReport, toolGuide } from './mcp.ts';
+import { addGrant, allowedFor, neverFor } from './grants.ts';
 import { bus } from './bus.ts';
 import { addEvent, getMark, getSubtask, setMark, updateSubtask, type EventKind, type Subtask } from './db.ts';
 import { getTeam, peopleNames, peopleSection, readNotes, repoFor, who, type Role, type Team } from './roles.ts';
-import { withOwner } from './owner.ts';
+import { OWNER, withOwner } from './owner.ts';
 import { IMAGES_DIR, shownText } from './images.ts';
 import { infraEnv, infraSection } from './infra.ts';
 import { devAppsSection } from './devapps.ts';
@@ -72,6 +73,8 @@ interface Run {
   message: string;
   /** The error the turn ended on, from Claude's result. */
   error: string;
+  /** Tool calls of this turn by id, to know what a denial was for. */
+  calls: Map<string, { name: string; input: unknown }>;
 }
 
 const runs = new Map<number, Run>();
@@ -271,6 +274,7 @@ function handleLine(subtaskId: number, run: Run, line: string) {
           run.lastText = block.text;
           log(subtaskId, 'text', block.text);
         } else if (block.type === 'tool_use') {
+          run.calls.set(block.id, { name: block.name, input: block.input ?? {} });
           log(subtaskId, 'tool', describeTool(block.name, block.input ?? {}));
         }
       }
@@ -281,6 +285,10 @@ function handleLine(subtaskId: number, run: Run, line: string) {
         if (block.type === 'tool_result') {
           const text = toolResultText(block.content).trim();
           if (text) log(subtaskId, 'tool-result', text.length > 2000 ? `${text.slice(0, 2000)}\n…` : text);
+          const call = run.calls.get(block.tool_use_id);
+          const denied = block.is_error && call ? denialReason(text) : null;
+          const subtask = denied ? getSubtask(subtaskId) : undefined;
+          if (denied && call && subtask) reportDenial(subtask, call.name, call.input, denied, (what) => allowAndRerun(subtaskId, call.name, what));
         }
       }
       return;
@@ -294,6 +302,28 @@ function handleLine(subtaskId: number, run: Run, line: string) {
       return;
     }
   }
+}
+
+/**
+ * Claude Code's own no, said without asking anyone: a rule from --disallowedTools
+ * or auto mode's classifier. A no from the owner through the approve tool reads
+ * differently and is not asked again.
+ */
+function denialReason(text: string): string | null {
+  const t = text.replace(/^Error:\s*/, '');
+  const classifier = /denied by the Claude Code auto mode classifier\.?\s*(?:Reason:\s*(\[[^\]]+\]))?/i.exec(t);
+  if (classifier) return `Auto-läget sa nej${classifier[1] ? ` ${classifier[1]}` : ''}.`;
+  if (/^Permission to use \S+ .*has been denied\.?$/s.test(t)) return 'En spärr i kontrollrummet sa nej.';
+  return null;
+}
+
+/** The owner said yes to something Claude Code denied: keep it on the card and let the agent try again. */
+function allowAndRerun(subtaskId: number, tool: string, what: string) {
+  const grant = addGrant(subtaskId, tool, what);
+  const lifted = grant.lifts.length ? ` Spärren ${grant.lifts.join(', ')} gäller inte längre för kortet.` : '';
+  log(subtaskId, 'system', `${OWNER} tillät ${tool}: ${what.slice(0, 300)}.${lifted}`);
+  // In the owner's words: auto mode's classifier reads the user's messages for what is allowed.
+  void startAgent(subtaskId, `Jag tillåter det som nekades: ${tool === 'Bash' ? `\`${what}\`` : `${tool} ${what}`}. Kör det igen och fortsätt där du var.`);
 }
 
 /** Claude Code's own login is gone: the agent never got to start. */
@@ -434,7 +464,8 @@ async function launch(
   const role = team.roles.find((r) => r.id === agent);
   if (!role) throw new Error(`rollen ${agent} finns inte i teams/${team.id}/roles/`);
 
-  if (role.worktree && !subtask.worktree) {
+  // No worktree yet, or it was removed after the card was done: (re)make it.
+  if (role.worktree && (!subtask.worktree || !existsSync(subtask.worktree))) {
     try {
       const wt = await ensureWorktree(team, repoFor(team, role, subtask), subtask.id, role.id, subtask.brief);
       subtask = patch(subtask.id, { worktree: wt.path, branch: wt.branch });
@@ -464,13 +495,14 @@ async function launch(
         // Only the servers this role is given: each one's instructions are read on every step.
         // Its own servers, and those of the consultants it may ask that are reached through MCP.
         ...serversFor(team, role.mcp === 'all' ? role : { mcp: [...new Set([...role.mcp, ...consultantServers(team.id, role.id)])] }),
-        'control-room': { type: 'http', url: `http://127.0.0.1:${PORT}/mcp`, headers: { Authorization: `Bearer ${token}` } },
+        'control-room': { type: 'http', url: `http://127.0.0.1:${PORT}/mcp`, headers: { Authorization: `Bearer ${token}` }, timeout: CONTROL_ROOM_TOOL_MS },
       },
     }),
     '--append-system-prompt', systemPrompt(team, role, subtask, (await providerFor(repoFor(team, role, subtask).path))?.prHow ?? ''),
     // The control room's own tools never need asking about.
-    '--allowedTools', 'mcp__control-room',
-    '--disallowedTools', ...NEVER, ...(PLANNERS.has(role.kind) ? HANDS_OFF : []),
+    // What the owner allowed on this card after Claude Code said no.
+    '--allowedTools', 'mcp__control-room', ...allowedFor(subtask.id),
+    '--disallowedTools', ...neverFor(subtask.id), ...(PLANNERS.has(role.kind) ? HANDS_OFF : []),
     // Skills and commands in the repos that the project has turned off.
     ...team.disabledSkills.map((s) => `Skill(${s})`),
   ];
@@ -518,6 +550,7 @@ async function launch(
     account: team.account,
     message: first,
     error: '',
+    calls: new Map(),
   };
   runs.set(subtask.id, run);
   // A new turn answers whatever was asked: an old question (a login) must not linger.
