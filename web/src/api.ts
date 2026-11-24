@@ -193,6 +193,8 @@ export interface Approval {
   tool: string;
   summary: string;
   at: string;
+  /** Rules proposed for "Tillåt alltid". */
+  suggestedRules?: string[];
   /** Claude Code already said no on its own; a yes allows it on the card and runs it again. */
   denied?: string;
 }
@@ -534,6 +536,24 @@ function reduce(board: Board, action: Action): Board {
 
 export async function put(path: string, body: unknown): Promise<unknown> {
   const res = await fetch(path, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const data = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+  return data;
+}
+
+export interface PermissionRule {
+  rule: string;
+  at: string;
+  from?: { card?: number; command?: string };
+}
+export interface PermissionList {
+  defaults: { group: string; rules: string[] }[];
+  team: PermissionRule[];
+  global: PermissionRule[];
+}
+
+export async function del(path: string, body: unknown): Promise<unknown> {
+  const res = await fetch(path, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const data = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
   return data;

@@ -16,6 +16,8 @@ export interface Approval {
   tool: string;
   /** What the agent wants to run, short enough to read on a phone. */
   summary: string;
+  /** Rules proposed for "Tillåt alltid", from the command. */
+  suggestedRules?: string[];
   at: string;
   /**
    * Claude Code already said no on its own (a hard rule or auto mode), so

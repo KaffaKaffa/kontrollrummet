@@ -440,9 +440,24 @@ export function Composer({
 /** Something an agent wants to do that auto mode would not decide alone. */
 export function ApprovalCard({ approval, role, team }: { approval: Approval; role?: Role; team: string }) {
   const [busy, setBusy] = useState(false);
+  const [always, setAlways] = useState(false);
+  const [rules, setRules] = useState((approval.suggestedRules ?? []).join('\n'));
+  const [scope, setScope] = useState<'team' | 'global'>('team');
+  const [error, setError] = useState<string | null>(null);
   const decide = (allow: boolean) => async () => {
     setBusy(true);
+    setError(null);
     await post(`/api/approvals/${approval.id}`, { allow }).catch(() => setBusy(false));
+  };
+  const allowAlways = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await post(`/api/approvals/${approval.id}`, { allow: true, always: true, scope, rules: rules.split('\n').map((r) => r.trim()).filter(Boolean) });
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
   };
   return (
     <div className="approval">
@@ -473,7 +488,34 @@ export function ApprovalCard({ approval, role, team }: { approval: Approval; rol
           <button type="button" className="btn" onClick={decide(false)} disabled={busy}>
             {approval.denied ? 'Låt bli' : 'Neka'}
           </button>
+          {approval.tool === 'Bash' && !always && (
+            <button type="button" className="btn" onClick={() => setAlways(true)} disabled={busy}>
+              Tillåt alltid…
+            </button>
+          )}
         </div>
+        {always && (
+          <div className="approval-always">
+            <p className="approval-why">En regel per rad. Ändra den så att den inte blir bredare än du vill.</p>
+            <textarea className="approval-rules" rows={Math.max(2, rules.split('\n').length)} value={rules} onChange={(e) => setRules(e.target.value)} spellCheck={false} />
+            <label>
+              Gäller{' '}
+              <select value={scope} onChange={(e) => setScope(e.target.value as 'team' | 'global')}>
+                <option value="team">det här projektet</option>
+                <option value="global">alla projekt</option>
+              </select>
+            </label>
+            <div className="approval-actions">
+              <button type="button" className="btn btn-primary" onClick={allowAlways} disabled={busy || !rules.trim()}>
+                Spara och tillåt
+              </button>
+              <button type="button" className="btn" onClick={() => setAlways(false)} disabled={busy}>
+                Avbryt
+              </button>
+            </div>
+          </div>
+        )}
+        {error && <p className="approval-why">{error}</p>}
       </div>
     </div>
   );

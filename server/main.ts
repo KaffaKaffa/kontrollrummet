@@ -43,6 +43,7 @@ import {
   listTasks,
   updateSubtask,
 } from './db.ts';
+import { addRule, isTooBroad, listRules, removeRule } from './permissions.ts';
 import { decideApproval, handleMcp, listApprovals, lockHolders, lockQueues } from './mcp.ts';
 import { IMAGE_MODEL, IMAGES_DIR, imagesAvailable, saveCardUpload } from './images.ts';
 import { getUsage, pausedUntilIso } from './usage.ts';
@@ -707,9 +708,39 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
     return json(res, 200, {});
   }
 
+  if (path === '/api/permissions') {
+    if (req.method === 'GET') return json(res, 200, listRules(new URL(req.url ?? '/', 'http://x').searchParams.get('team') ?? ''));
+    const body = await readJson(req);
+    const scope = body.scope === 'global' ? 'global' : 'team';
+    const team = String(body.team ?? '');
+    if (req.method === 'POST') {
+      try {
+        addRule(scope, team, String(body.rule ?? ''));
+      } catch (err) {
+        throw new HttpError(400, (err as Error).message);
+      }
+      return json(res, 200, listRules(team));
+    }
+    if (req.method === 'DELETE') {
+      if (!removeRule(scope, team, String(body.rule ?? ''))) throw new HttpError(404, 'regeln finns inte');
+      return json(res, 200, listRules(team));
+    }
+  }
+
   const approval = /^\/api\/approvals\/([\w-]+)$/.exec(path);
   if (req.method === 'POST' && approval) {
     const body = await readJson(req);
+    // "Tillåt alltid": the owner's (possibly edited) rules are saved first, then the question is answered yes.
+    if (body.always === true && body.allow === true) {
+      const open = listApprovals().find((a) => a.id === approval[1]);
+      if (!open) throw new HttpError(404, 'frågan är redan besvarad');
+      const rules = Array.isArray(body.rules) ? body.rules.map(String) : [];
+      if (!rules.length) throw new HttpError(400, 'ingen regel att spara');
+      const bad = rules.map((r) => [r, isTooBroad(r)] as const).find(([, why]) => why);
+      if (bad) throw new HttpError(400, `${bad[0]}: ${bad[1]}`);
+      for (const rule of rules)
+        addRule(body.scope === 'global' ? 'global' : 'team', open.team, rule, { ...(open.subtaskId != null ? { card: open.subtaskId } : {}), command: open.summary.slice(0, 200) });
+    }
     const ok = decideApproval(approval[1], body.allow === true, typeof body.reason === 'string' ? body.reason : undefined);
     if (!ok) throw new HttpError(404, 'frågan är redan besvarad');
     return json(res, 200, {});

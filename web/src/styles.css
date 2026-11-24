@@ -3933,3 +3933,7 @@ button.link-chip {
   color: var(--color-state-danger-text);
   font-size: var(--text-footnote-size);
 }
+
+.approval-always { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.approval-rules { font-family: var(--mono, monospace); width: 100%; }
+.permission-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
