@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { bus, type Approval } from './bus.ts';
+import { suggestRules } from './permissions.ts';
 import { OWNER, OWNERS } from './owner.ts';
 import { finishConsultation, progress, startConsultation } from './consultations.ts';
 import {
@@ -199,8 +200,9 @@ export function decideApproval(id: string, allow: boolean, reason?: string) {
   return true;
 }
 
-/** An approval nobody answers is a no, after half an hour; the card is not left hanging forever. */
-const APPROVAL_TIMEOUT = 30 * 60 * 1000;
+/** An approval stays for hours: a no after half an hour made agents skip the test and open the PR. */
+const APPROVAL_TIMEOUT = 4 * 60 * 60 * 1000;
+const NO_ANSWER = 'Ingen svarade än.';
 
 function askApproval(subtask: Subtask, tool: string, input: unknown): Promise<{ allow: boolean; reason?: string }> {
   const asked = requestApproval({ subtaskId: subtask.id, team: subtask.team }, tool, input);
@@ -224,12 +226,13 @@ export function requestApproval(
     ...owner,
     tool,
     summary: detail.slice(0, 600),
+    ...(tool === 'Bash' ? { suggestedRules: suggestRules(detail) } : {}),
     at: new Date().toISOString(),
     ...(denied ? { denied } : {}),
   };
   const answer = new Promise<{ allow: boolean; reason?: string }>((resolve) => {
     // Nothing waits on a denial, so it stays until the owner has seen it.
-    const timer = denied ? undefined : setTimeout(() => decideApproval(approval.id, false, 'Ingen svarade inom 30 minuter.'), APPROVAL_TIMEOUT);
+    const timer = denied ? undefined : setTimeout(() => decideApproval(approval.id, false, NO_ANSWER), APPROVAL_TIMEOUT);
     pending.set(approval.id, {
       approval,
       resolve: (allow, reason) => {
@@ -957,7 +960,13 @@ const TOOLS: Tool[] = [
       return JSON.stringify(
         allow
           ? { behavior: 'allow', updatedInput: a.input }
-          : { behavior: 'deny', message: reason ?? `${OWNER} sa nej. Fortsätt utan det, eller fråga varför i ditt slutmeddelande.` },
+          : {
+              behavior: 'deny',
+              message:
+                reason === NO_ANSWER
+                  ? `${NO_ANSWER} Gör klart det som inte beror på det, och avsluta med report needs-you med frågan. Öppna ingen PR som om det vore gjort.`
+                  : `${OWNER} sa nej till just det här${reason ? `: ${reason}` : ''}. Försök en annan väg till samma mål. Finns ingen, rapportera needs-you med frågan. Öppna inte en PR som om det vore gjort, och skriv i PR:en vad som inte gjordes.`,
+            },
       );
     },
   },

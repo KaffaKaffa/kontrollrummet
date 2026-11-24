@@ -61,8 +61,8 @@ export const NEVER = [
  */
 export const CONTEXT_WINDOW = 140_000;
 
-/** How long a call to the control room's own tools may take: an approval (30 min) and then the work. */
-export const CONTROL_ROOM_TOOL_MS = 35 * 60 * 1000;
+/** How long a call to the control room's own tools may take: an approval (up to 4 h) and then the work. */
+export const CONTROL_ROOM_TOOL_MS = 4 * 60 * 60 * 1000 + 5 * 60 * 1000;
 
 /**
  * A process for this account: its login and gh, the compaction window, and
@@ -72,7 +72,7 @@ export function claudeEnv(account: string, context: number, extra: Record<string
   return {
     ...accountEnv(account),
     ...extra,
-    // An approval can wait for the owner for half an hour; the tool call must outlive that.
+    // An approval can wait for the owner for hours; the tool call must outlive that.
     MCP_TOOL_TIMEOUT: String(CONTROL_ROOM_TOOL_MS),
     // A call is also cut after 300 s with no word from the server: waiting for the owner's
     // yes and then a consultant's answer is exactly that, so the answer came and was lost.

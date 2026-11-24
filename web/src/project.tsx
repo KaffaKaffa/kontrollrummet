@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ConsultantsTab } from './consultants.tsx';
 import { DevAppsTab } from './devapps.tsx';
-import { nameOf, post, put, type Board, type InfraItem, type Check, type CheckFor, type Existing, type ExistingSkill, type Library, type Scan, type Suggested, type Team } from './api.ts';
+import { del, nameOf, post, put, type PermissionList, type Board, type InfraItem, type Check, type CheckFor, type Existing, type ExistingSkill, type Library, type Scan, type Suggested, type Team } from './api.ts';
 import { Avatar } from './ui.tsx';
 import { FolderField } from './folders.tsx';
 
@@ -823,7 +823,7 @@ function McpOverview({ team }: { team: Team }) {
   );
 }
 
-const TAB_LABEL = { project: 'Projektet', git: 'Git', apps: 'Appar', consultants: 'Konsulter', infra: 'Infrastruktur', logging: 'Loggning' } as const;
+const TAB_LABEL = { project: 'Projektet', git: 'Git', apps: 'Appar', consultants: 'Konsulter', infra: 'Infrastruktur', logging: 'Loggning', permissions: 'Behörigheter' } as const;
 type SettingsTab = keyof typeof TAB_LABEL;
 
 export function ProjectSettings({ board, team, extra }: { board: Board; team: Team; extra?: ReactNode }) {
@@ -886,7 +886,82 @@ export function ProjectSettings({ board, team, extra }: { board: Board; team: Te
       {tab === 'consultants' && <ConsultantsTab key={team.id} team={team} roles={team.roles} />}
       {tab === 'infra' && <InfraTab team={team} />}
       {tab === 'logging' && <LoggingTab team={team} />}
+      {tab === 'permissions' && <PermissionsTab key={team.id} team={team} />}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- permissions
+
+/** What agents may run without asking: defaults, and what the owner saved with "Tillåt alltid". */
+function PermissionsTab({ team }: { team: Team }) {
+  const [list, setList] = useState<PermissionList | null>(null);
+  const [rule, setRule] = useState('');
+  const [scope, setScope] = useState<'team' | 'global'>('team');
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(() => {
+    void fetch(`/api/permissions?team=${encodeURIComponent(team.id)}`)
+      .then((r) => r.json())
+      .then((l: PermissionList) => setList(l));
+  }, [team.id]);
+  useEffect(load, [load]);
+  const add = async () => {
+    setError(null);
+    try {
+      setList((await post('/api/permissions', { scope, team: team.id, rule })) as PermissionList);
+      setRule('');
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+  const remove = async (s: 'team' | 'global', r: string) => setList((await del('/api/permissions', { scope: s, team: team.id, rule: r })) as PermissionList);
+  const rows = (s: 'team' | 'global', items: PermissionList['team']) =>
+    items.length === 0 ? (
+      <p className="settings-note">Inga än.</p>
+    ) : (
+      <ul className="permission-list">
+        {items.map((p) => (
+          <li key={p.rule}>
+            <code>{p.rule}</code>{' '}
+            <span className="settings-note">
+              {new Date(p.at).toLocaleDateString('sv-SE')}
+              {p.from?.card != null && <> · kort #{p.from.card}</>}
+            </span>{' '}
+            <button type="button" className="btn" onClick={() => void remove(s, p.rule)}>
+              Ta bort
+            </button>
+          </li>
+        ))}
+      </ul>
+    );
+  if (!list) return <p className="settings-note">Läser…</p>;
+  return (
+    <>
+      <Section title="Alltid tillåtet i projektet" note="Sparas på den här datorn, inte i git. Gäller alla agenter i projektet som ändrar kod.">
+        {rows('team', list.team)}
+      </Section>
+      <Section title="Alltid tillåtet i alla projekt">{rows('global', list.global)}</Section>
+      <Section title="Lägg till regel" note="Samma form som i Claude Code, till exempel Bash(npx playwright test:*). Regler som tillåter vad som helst, eller något som aldrig får tillåtas (release, deploy, merge), sparas inte.">
+        <div className="approval-actions">
+          <input value={rule} onChange={(e) => setRule(e.target.value)} placeholder="Bash(kommando:*)" spellCheck={false} />
+          <select value={scope} onChange={(e) => setScope(e.target.value as 'team' | 'global')}>
+            <option value="team">det här projektet</option>
+            <option value="global">alla projekt</option>
+          </select>
+          <button type="button" className="btn btn-primary" onClick={() => void add()} disabled={!rule.trim()}>
+            Lägg till
+          </button>
+        </div>
+        {error && <p className="settings-note">{error}</p>}
+      </Section>
+      <Section title="Standard för roller som ändrar kod" note="Rutin i agentens egen worktree: tillåtet utan att fråga. Release, deploy och merge är fortfarande spärrade.">
+        {list.defaults.map((g) => (
+          <p key={g.group}>
+            <strong>{g.group}</strong>: {g.rules.map((r) => <code key={r}>{r} </code>)}
+          </p>
+        ))}
+      </Section>
+    </>
   );
 }
 

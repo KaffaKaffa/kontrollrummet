@@ -8,6 +8,7 @@ import { pauseLeft, pauseUntil, readRateLimitEvent } from './usage.ts';
 import { CONTROL_ROOM_TOOL_MS, claudeEnv, contextOf, describeTool, toolResultText, userLine } from './claude-run.ts';
 import { issueToken, releaseLocks, reportDenial, revokeToken, takeReport, toolGuide } from './mcp.ts';
 import { addGrant, allowedFor, neverFor } from './grants.ts';
+import { rulesFor } from './permissions.ts';
 import { bus } from './bus.ts';
 import { addEvent, getMark, getSubtask, setMark, updateSubtask, type EventKind, type Subtask } from './db.ts';
 import { getTeam, peopleNames, peopleSection, readNotes, repoFor, who, type Role, type Team } from './roles.ts';
@@ -501,7 +502,7 @@ async function launch(
     '--append-system-prompt', systemPrompt(team, role, subtask, (await providerFor(repoFor(team, role, subtask).path))?.prHow ?? ''),
     // The control room's own tools never need asking about.
     // What the owner allowed on this card after Claude Code said no.
-    '--allowedTools', 'mcp__control-room', ...allowedFor(subtask.id),
+    '--allowedTools', 'mcp__control-room', ...rulesFor(team.id, PLANNERS.has(role.kind)), ...allowedFor(subtask.id),
     '--disallowedTools', ...neverFor(subtask.id), ...(PLANNERS.has(role.kind) ? HANDS_OFF : []),
     // Skills and commands in the repos that the project has turned off.
     ...team.disabledSkills.map((s) => `Skill(${s})`),
