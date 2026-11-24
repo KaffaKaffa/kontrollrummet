@@ -1,7 +1,6 @@
-import { MAX_CONCURRENT } from './config.ts';
 import { bus } from './bus.ts';
 import { addEvent, listSubtasks, updateSubtask } from './db.ts';
-import { accountOfCard, isRunning, onQuotaPause, onSlotFreed, runningCount, startAgent, takeWake } from './agent.ts';
+import { accountOfCard, isRunning, hasRoom, onQuotaPause, onSlotFreed, startAgent, takeWake } from './agent.ts';
 import { nextResume, pauseLeft } from './usage.ts';
 import { onCardsCreated, onMessageCard } from './mcp.ts';
 import { startWatching } from './watch.ts';
@@ -27,7 +26,7 @@ export function tick() {
     if ((s.status !== 'queued' && s.status !== 'quota') || isRunning(s.id)) continue;
     // Each account is its own subscription, with its own cap and quota.
     const account = accountOfCard(s.id);
-    if (pauseLeft(account) > 0 || runningCount(account) >= MAX_CONCURRENT) continue;
+    if (pauseLeft(account) > 0 || !hasRoom(s.id)) continue;
     if (!s.dependsOn.every((d) => done.has(d))) continue;
     // A queued card with a session has been started before: it continues, it does not start over.
     // A wake-up that waited for its slot is delivered now, as the wake-up it was.

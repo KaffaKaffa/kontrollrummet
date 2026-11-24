@@ -3,6 +3,7 @@ import { ConsultantsTab } from './consultants.tsx';
 import { DevAppsTab } from './devapps.tsx';
 import { del, nameOf, post, put, type PermissionList, type Board, type InfraItem, type Check, type CheckFor, type Existing, type ExistingSkill, type Library, type Scan, type Suggested, type Team } from './api.ts';
 import { Avatar } from './ui.tsx';
+import { TeamCap } from './limits.tsx';
 import { FolderField } from './folders.tsx';
 
 /**
@@ -864,6 +865,7 @@ export function ProjectSettings({ board, team, extra }: { board: Board; team: Te
       {tab === 'project' && (
         <>
           <General key={`${team.id}-${team.account}-${team.name}`} board={board} team={team} />
+          <TeamCap board={board} team={team} />
           <People key={`${team.id}-people`} team={team} />
           {extra}
           <Agents team={team} library={library} />

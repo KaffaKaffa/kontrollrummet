@@ -17,7 +17,7 @@ export const PORT = Number(process.env.CONTROL_ROOM_PORT ?? 4317);
 /** Loopback only. Remote access comes through Tailscale later, never the open LAN. */
 export const HOST = '127.0.0.1';
 
-/** Parallel agents per Claude account: the teams on one account share its subscription's limits. */
+/** The default cap per Claude account when none is saved in the app: the teams on one account share its subscription's limits. */
 export const MAX_CONCURRENT = Number(process.env.CONTROL_ROOM_MAX_AGENTS ?? 2);
 
 export const CLAUDE_BIN = process.env.CONTROL_ROOM_CLAUDE ?? 'claude';

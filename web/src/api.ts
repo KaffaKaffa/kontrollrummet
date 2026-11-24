@@ -49,6 +49,8 @@ export interface Account {
   loggedIn: boolean;
   email: string | null;
   organization: string | null;
+  /** Most agents at once on this account; null: no limit. */
+  maxAgents: number | null;
 }
 
 export interface McpServerInfo {
@@ -115,6 +117,8 @@ export interface Team {
   monitorEveryMinutes: number;
   /** Existing skills and commands the agents do not use. */
   disabledSkills: string[];
+  /** Most agents at once in this project; null: no limit. */
+  maxAgents: number | null;
   teamPrompt: string;
   hasReleases: boolean;
   /** The people in the project: who merges, decides, reviews. */
@@ -322,8 +326,7 @@ interface ServerState {
   teams: Team[];
   tasks: Task[];
   subtasks: Subtask[];
-  /** maxAgents is per Claude account. */
-  limits: { maxAgents: number; running: number };
+  limits: { running: number };
   accounts: Account[];
   approvals: Approval[];
   /** The latest questions to consultants, live while they are answered. */
@@ -395,7 +398,7 @@ const initial: Board = {
   teams: [],
   tasks: [],
   subtasks: [],
-  limits: { maxAgents: 0, running: 0 },
+  limits: { running: 0 },
   accounts: [],
   approvals: [],
   consultations: [],
@@ -437,7 +440,7 @@ function reduce(board: Board, action: Action): Board {
       return {
         ...board,
         ...action.state,
-        accounts: action.state.accounts ?? [],
+        accounts: (action.state.accounts ?? []).map((a) => ({ ...a, maxAgents: a.maxAgents ?? null })),
         consultations: action.state.consultations ?? [],
         conversations: action.state.conversations ?? [],
         devApps: action.state.devApps ?? {},
@@ -447,7 +450,7 @@ function reduce(board: Board, action: Action): Board {
         ),
         usage: action.state.usage && !('seenAt' in action.state.usage) ? action.state.usage : {},
         pausedUntil: action.state.pausedUntil && typeof action.state.pausedUntil === 'object' ? action.state.pausedUntil : {},
-        teams: action.state.teams.map((t) => ({ ...t, mcpServers: t.mcpServers ?? [], repos: t.repos ?? [], azure: t.azure ?? false, azureConfigDir: t.azureConfigDir ?? null, azurePortalConfigDir: t.azurePortalConfigDir ?? null, infraItems: t.infraItems ?? [], monitorEveryMinutes: t.monitorEveryMinutes ?? 30, disabledSkills: t.disabledSkills ?? [], roles: t.roles.map((r) => ({ ...r, mcp: r.mcp ?? [], repos: r.repos ?? [] })) })),
+        teams: action.state.teams.map((t) => ({ ...t, mcpServers: t.mcpServers ?? [], repos: t.repos ?? [], azure: t.azure ?? false, azureConfigDir: t.azureConfigDir ?? null, azurePortalConfigDir: t.azurePortalConfigDir ?? null, infraItems: t.infraItems ?? [], monitorEveryMinutes: t.monitorEveryMinutes ?? 30, disabledSkills: t.disabledSkills ?? [], maxAgents: t.maxAgents ?? null, roles: t.roles.map((r) => ({ ...r, mcp: r.mcp ?? [], repos: r.repos ?? [] })) })),
       };
     case 'task':
       // A renamed task keeps its place; a new one goes first.
