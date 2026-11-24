@@ -8,6 +8,7 @@ import { generateImage, IMAGE_MODEL, IMAGES_DIR, type GeneratedImage } from './i
 import { getTeam, type Team } from './roles.ts';
 import { readSecret } from './secrets.ts';
 import { slug } from './worktree.ts';
+import { addNotice, copilotCreditsToday, getSubtask, recordCopilotUsage } from './db.ts';
 
 /**
  * Consultants: specialists the agents ask over an API instead of colleagues in
@@ -476,12 +477,57 @@ async function askOpenAi(c: Consultant, question: string, onProgress?: (p: Progr
 }
 
 /** xAI and Perplexity speak OpenAI's chat completions. */
+/** Copilot limits in AI credits (1 credit = 0.01 USD), per card and per day; override with COPILOT_CARD_LIMIT / COPILOT_DAY_LIMIT. */
+const limit = (env: string, fallback: number) => {
+  const n = Number(process.env[env]);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+export const copilotLimits = () => ({ card: limit('COPILOT_CARD_LIMIT', 50), day: limit('COPILOT_DAY_LIMIT', 200) });
+
+/** Things that look like keys or tokens; a question is never sent with one. */
+const SECRET_PATTERNS: [string, RegExp][] = [
+  ['GitHub-token', /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/],
+  ['API-nyckel', /\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}/],
+  ['AWS-nyckel', /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/],
+  ['Google-nyckel', /\bAIza[0-9A-Za-z_-]{35}\b/],
+  ['Slack-token', /\bxox[abprs]-[A-Za-z0-9-]{10,}/],
+  ['privat nyckel', /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
+  ['JWT', /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/],
+  ['lösenord eller nyckel', /\b(?:password|passwd|secret|api[_-]?key|token)\s*[:=]\s*["']?[A-Za-z0-9+/_\-.]{16,}/i],
+];
+
+export function findSecret(text: string): string | null {
+  for (const [label, re] of SECRET_PATTERNS) if (re.test(text)) return label;
+  return null;
+}
+
+/** Before a Copilot call: stops when the card's or the day's credits are spent, or GitHub's own quota is. */
+async function copilotPrecheck(c: Consultant, teamId: string, subtaskId: number | undefined, token: string) {
+  const lim = copilotLimits();
+  const card = subtaskId != null ? (getSubtask(subtaskId)?.consultCredits ?? 0) : 0;
+  const day = copilotCreditsToday();
+  let reason = '';
+  if (subtaskId != null && card >= lim.card) reason = `kortet har använt ${card.toFixed(1)} av ${lim.card} AI-credits på Copilot`;
+  else if (day >= lim.day) reason = `dagens gräns på ${lim.day} AI-credits för Copilot är nådd (${day.toFixed(1)} använda)`;
+  else {
+    try {
+      const q = await copilot.quota(token);
+      if (!q.unlimited && q.remainingPercent !== undefined && q.remainingPercent <= 0) reason = 'månadens Copilot-kvot är slut';
+    } catch {
+      // Unknown quota: the card and day limits still hold.
+    }
+  }
+  if (!reason) return;
+  addNotice(teamId, subtaskId ?? null, `${consultantWho(c)} (Copilot) nekades: ${reason}. Höj gränsen med COPILOT_CARD_LIMIT / COPILOT_DAY_LIMIT eller vänta.`);
+  throw new Error(`${consultantWho(c)} kan inte frågas nu: ${reason}. Fortsätt utan konsulten eller be ägaren höja gränsen.`);
+}
+
 /** Asks through the Copilot SDK: no tools, an empty directory, a time limit. */
-async function askCopilot(c: Consultant, question: string, token: string, onProgress?: (p: Progress) => void): Promise<{ text: string; meta: string }> {
+async function askCopilot(c: Consultant, question: string, token: string, onProgress?: (p: Progress) => void): Promise<{ text: string; meta: string; a: copilot.CopilotAnswer }> {
   try {
     const a = await copilot.ask({ token, model: c.model, system: c.instructions, question });
     if (a.text) onProgress?.({ answer: a.text });
-    return { text: a.text, meta: `${a.model}\t${a.inputTokens}\t${a.outputTokens}\t${a.credits.toFixed(2)}` };
+    return { text: a.text, meta: `${a.model}\t${a.inputTokens}\t${a.outputTokens}\t${a.credits.toFixed(2)}`, a };
   } catch (err) {
     if (err instanceof copilot.CopilotError && err.reason === 'timeout') {
       throw new Error(`${err.message} (${consultantWho(c)}); fortsätt utan eller förenkla frågan`);
@@ -593,7 +639,7 @@ export async function consult(
   teamId: string,
   ref: string,
   question: string,
-  opts: { saveTo?: string; worktree?: string | null; size?: '1024x1024' | '1536x1024' | '1024x1536'; onProgress?: (p: Progress) => void } = {},
+  opts: { subtaskId?: number; saveTo?: string; worktree?: string | null; size?: '1024x1024' | '1536x1024' | '1024x1536'; onProgress?: (p: Progress) => void } = {},
 ): Promise<{ consultant: Consultant; answer: Answer }> {
   const team = getTeam(teamId);
   if (!team) throw new Error('teamet finns inte');
@@ -601,6 +647,13 @@ export async function consult(
   if (!c) throw new Error(`ingen konsult som heter ${ref}`);
   if (!isApi(c.provider)) throw new Error(`${consultantWho(c)} nås via MCP-servern ${c.mcp || '(ingen vald)'}, inte över API`);
   if (!c.model) throw new Error(`${consultantWho(c)} har ingen modell vald (Inställningar → Konsulter)`);
+  if (c.provider === 'copilot') {
+    const found = findSecret(question);
+    if (found) {
+      addNotice(teamId, opts.subtaskId ?? null, `Frågan till ${consultantWho(c)} (Copilot) stoppades: den ser ut att innehålla en ${found}.`);
+      throw new Error(`Frågan nekades: den ser ut att innehålla en ${found}. Ta bort den och fråga igen utan hemligheter.`);
+    }
+  }
   let answer: Answer;
   let meta = '';
   if (c.kind === 'image') {
@@ -633,7 +686,10 @@ export async function consult(
     const text =
       c.provider === 'copilot'
         ? await (async () => {
-            const got = await askCopilot(c, question, key('copilot'), opts.onProgress);
+            const token = key('copilot');
+            await copilotPrecheck(c, teamId, opts.subtaskId, token);
+            const got = await askCopilot(c, question, token, opts.onProgress);
+            recordCopilotUsage({ team: teamId, subtaskId: opts.subtaskId ?? null, consultant: c.id, model: got.a.model, inputTokens: got.a.inputTokens, outputTokens: got.a.outputTokens, credits: got.a.credits, exact: got.a.creditsExact, question });
             meta = got.meta;
             return got.text;
           })()
@@ -672,9 +728,9 @@ export function consultantsSection(teamId: string): string {
   const consent = { always: ' Ägaren godkänner varje fråga.', session: ' Ägaren godkänner första frågan på kortet.', never: '' };
   const lines = list.map(
     (c) =>
-      `- \`${c.id}\`: ${consultantWho(c)}${c.title ? `, ${c.title}` : ''}. ${isApi(c.provider) ? `${c.kind === 'image' ? 'Gör bilder.' : 'Svarar i text.'} (${PROVIDER_LABEL[c.provider]}${c.model ? ` ${c.model}` : ''}${c.web ? ', söker på webben' : ''})` : `${PROVIDER_LABEL[c.provider]} via MCP-servern \`${c.mcp || '?'}\`: kör \`consult\` först (för instruktionerna och ägarens samtycke), använd sedan serverns verktyg.`}${who(c)}${consent[c.consent]}`,
+      `- \`${c.id}\`: ${consultantWho(c)}${c.title ? `, ${c.title}` : ''}. ${isApi(c.provider) ? `${c.kind === 'image' ? 'Gör bilder.' : 'Svarar i text.'} (${PROVIDER_LABEL[c.provider]}${c.model ? ` ${c.model}` : ''}${c.web ? ', söker på webben' : ''})${c.provider === 'copilot' ? ` Kostar AI-credits (1 credit = 0,01 USD) mot en gräns på ${copilotLimits().card} per kort och ${copilotLimits().day} per dag; frågor med nycklar eller tokens nekas. Inga hemligheter, kunddata eller personuppgifter.` : ''}` : `${PROVIDER_LABEL[c.provider]} via MCP-servern \`${c.mcp || '?'}\`: kör \`consult\` först (för instruktionerna och ägarens samtycke), använd sedan serverns verktyg.`}${who(c)}${consent[c.consent]}`,
   );
-  return `## Konsulter\n\nSpecialister utanför teamet som du frågar med \`consult\`: en fråga i taget, med allt de behöver veta i frågan (de ser inte repot eller kortet). Du gör sedan jobbet med svaret: skriver in texten i repot, lägger bilden på plats. Skicka aldrig personuppgifter, kunddata eller hemligheter till en konsult.\n\n${lines.join('\n')}`;
+  return `## Konsulter\n\nSpecialister utanför teamet som du frågar med \`consult\`: en fråga i taget, med allt de behöver veta i frågan (de ser inte repot eller kortet). Du gör sedan jobbet med svaret: skriver in texten i repot, lägger bilden på plats. Skicka aldrig personuppgifter, kunddata eller hemligheter (nycklar, tokens, lösenord) till en konsult.\n\n${lines.join('\n')}`;
 }
 
 /** The consultant as the web app shows it. */

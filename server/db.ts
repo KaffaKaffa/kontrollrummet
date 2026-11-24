@@ -50,6 +50,8 @@ export interface Subtask {
   costUsd: number;
   /** Tokens the agent read on its latest call: how big the conversation has grown. */
   contextTokens: number;
+  /** AI credits spent on Copilot consultants for this card. */
+  consultCredits: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -187,6 +189,23 @@ db.exec(`
   );
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS copilot_usage (
+    id INTEGER PRIMARY KEY,
+    team TEXT NOT NULL,
+    subtask_id INTEGER,
+    consultant TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    credits REAL NOT NULL DEFAULT 0,
+    exact INTEGER NOT NULL DEFAULT 0,
+    question TEXT NOT NULL DEFAULT '',
+    at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ'))
+  );
+  CREATE INDEX IF NOT EXISTS copilot_usage_by_time ON copilot_usage(at);
+`);
+
 /** Columns added after the first version; old databases get them on start. */
 for (const [table, column, type] of [
   ['subtasks', 'parent_id', 'INTEGER'],
@@ -195,6 +214,7 @@ for (const [table, column, type] of [
   ['subtasks', 'context_tokens', 'INTEGER NOT NULL DEFAULT 0'],
   ['subtasks', 'repo', 'TEXT'],
   ['subtasks', 'review', 'TEXT'],
+  ['subtasks', 'consult_credits', 'REAL NOT NULL DEFAULT 0'],
   ['notices', 'closed_at', 'TEXT'],
 ] as const) {
   const has = (db.prepare(`PRAGMA table_info(${table})`).all() as Row[]).some((c) => c.name === column);
@@ -232,6 +252,7 @@ const toSubtask = (r: Row): Subtask => ({
   review: r.review ? (JSON.parse(String(r.review)) as PrReview) : null,
   costUsd: Number(r.cost_usd),
   contextTokens: Number(r.context_tokens ?? 0),
+  consultCredits: Number(r.consult_credits ?? 0),
   createdAt: String(r.created_at),
   updatedAt: String(r.updated_at),
 });
@@ -356,6 +377,32 @@ export function addNotice(team: string, subtaskId: number | null, text: string):
   return toNotice(
     db.prepare('INSERT INTO notices (team, subtask_id, text) VALUES (?, ?, ?) RETURNING *').get(team, subtaskId, text) as Row,
   );
+}
+
+/** One Copilot consultant answer: its tokens and AI credits, per card and question. */
+export function recordCopilotUsage(u: {
+  team: string;
+  subtaskId: number | null;
+  consultant: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  credits: number;
+  exact: boolean;
+  question: string;
+}): void {
+  db.prepare(
+    'INSERT INTO copilot_usage (team, subtask_id, consultant, model, input_tokens, output_tokens, credits, exact, question) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(u.team, u.subtaskId, u.consultant, u.model, u.inputTokens, u.outputTokens, u.credits, u.exact ? 1 : 0, u.question.slice(0, 200));
+  if (u.subtaskId != null) db.prepare('UPDATE subtasks SET consult_credits = consult_credits + ? WHERE id = ?').run(u.credits, u.subtaskId);
+}
+
+/** Credits spent on Copilot since local midnight. */
+export function copilotCreditsToday(): number {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const r = db.prepare('SELECT COALESCE(SUM(credits), 0) AS c FROM copilot_usage WHERE at >= ?').get(start.toISOString()) as Row;
+  return Number(r.c);
 }
 
 export function listNotices(limit = 50): Notice[] {

@@ -814,7 +814,7 @@ const TOOLS: Tool[] = [
     name: 'consult',
     kinds: 'all',
     description:
-      'Fråga en av projektets konsulter (se Konsulter i din prompt): en jurist om en policy, en illustratör om en bild. En fråga i taget, med allt konsulten behöver veta i frågan; den ser inte repot eller kortet. Svaret kommer tillbaka till dig (och bilder sparas och visas på kortet); du gör sedan jobbet med det. Inga personuppgifter, kunddata eller hemligheter.',
+      'Fråga en av projektets konsulter (se Konsulter i din prompt): en jurist om en policy, en illustratör om en bild. En fråga i taget, med allt konsulten behöver veta i frågan; den ser inte repot eller kortet. Svaret kommer tillbaka till dig (och bilder sparas och visas på kortet); du gör sedan jobbet med det. Inga personuppgifter, kunddata eller hemligheter. GitHub Copilot kostar AI-credits (1 credit = 0,01 USD) mot en gräns per kort och per dag; är gränsen nådd, eller ser frågan ut att innehålla en nyckel eller token, nekas den.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -862,6 +862,7 @@ const TOOLS: Tool[] = [
       let answer: Awaited<ReturnType<typeof consult>>['answer'];
       try {
         ({ consultant, answer } = await consult(ctx.team.id, target.id, question, {
+          subtaskId: ctx.subtask.id,
           saveTo: a.save_to,
           worktree: ctx.subtask.worktree,
           size: a.size,
