@@ -304,7 +304,7 @@ const azure: GitProvider = {
       title: string;
       isDraft?: boolean;
       createdBy: { uniqueName: string; displayName: string };
-      reviewers: { uniqueName: string; vote: number; isRequired?: boolean }[];
+      reviewers: { uniqueName: string; displayName?: string; vote: number; isRequired?: boolean }[];
     }[];
     // Only what the owner holds up: a required reviewer with no vote yet (0). An optional one
     // blocks nothing. Own PRs count too: an agent or a pipeline opens them in the owner's name,
@@ -313,7 +313,7 @@ const azure: GitProvider = {
     return prs
       .filter((p) => !p.isDraft)
       .filter((p) => {
-        const votes = p.reviewers.filter((r) => mine.has(r.uniqueName.toLowerCase()));
+        const votes = p.reviewers.filter((r) => mine.has(r.uniqueName.toLowerCase()) || mine.has((r.displayName ?? '').toLowerCase()));
         return votes.some((r) => r.isRequired) && votes.every((r) => r.vote === 0);
       })
       .map((p) => ({
