@@ -7,11 +7,14 @@ const WARNING = 'Utan tak kan prenumerationens egna gränser nås, och då pausa
 /** A cap as a number or "Ingen gräns". Saves when changed. */
 function CapField({ value, onSave, busy }: { value: number | null; onSave: (cap: number | null) => void; busy: boolean }) {
   const [text, setText] = useState(value === null ? '' : String(value));
-  useEffect(() => setText(value === null ? '' : String(value)), [value]);
+  // Keep the last number when "Ingen gräns" is ticked, so unticking restores it.
+  useEffect(() => {
+    if (value !== null) setText(String(value));
+  }, [value]);
   const commit = () => {
     const n = Math.floor(Number(text));
     if (Number.isFinite(n) && n >= 1 && n !== value) onSave(Math.min(n, 99));
-    else setText(value === null ? '' : String(value));
+    else if (value !== null) setText(String(value));
   };
   return (
     <div className="field-inline">

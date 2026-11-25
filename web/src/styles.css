@@ -3201,15 +3201,36 @@ main:has(.office-layout) {
 }
 
 .topbar .topbar-status {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
+  /* The cap text is short and matters: the usage meter gives way first. */
+  flex: none;
   white-space: nowrap;
 }
 
 .topbar .notify-toggle,
 .topbar .theme-toggle {
   flex: none;
+}
+
+/* The tab groups together are wider than a laptop window: they shrink and scroll sideways
+   so the status and the buttons at the right end stay on screen. */
+.topbar .wordmark {
+  flex: none;
+}
+
+.topbar .tabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.topbar .tabs a {
+  flex: none;
+  white-space: nowrap;
+}
+
+.topbar .tabs a::after {
+  bottom: 0;
 }
 
 /* ------------------------------------------------------------ PRs waiting for review */
