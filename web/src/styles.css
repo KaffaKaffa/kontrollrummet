@@ -3233,6 +3233,56 @@ main:has(.office-layout) {
   bottom: 0;
 }
 
+/* Only the project tabs give way: they keep a minimum width and scroll inside their group.
+   Everything else on the bar keeps its full text. */
+.topbar .tabs[aria-label='Team'] {
+  flex: 1 1 auto;
+  min-width: calc(var(--space-160) * 1.5);
+}
+
+.topbar .tabs:not([aria-label='Team']),
+.topbar .devapp-bar {
+  flex: none;
+}
+
+.topbar .devapp-bar {
+  flex-wrap: nowrap;
+}
+
+.topbar .devapp-chip {
+  flex: none;
+  white-space: nowrap;
+}
+
+.topbar .topbar-status {
+  margin-left: auto;
+}
+
+.topbar .usage {
+  display: none;
+}
+
+@media (min-width: 1700px) {
+  .topbar .usage {
+    display: flex;
+    flex: none;
+  }
+
+  .topbar .usage + .topbar-status {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 1500px) {
+  .topbar .topbar-status {
+    display: none;
+  }
+
+  .topbar .tabs[aria-label='Team'] {
+    margin-right: auto;
+  }
+}
+
 /* ------------------------------------------------------------ PRs waiting for review */
 
 .notice-review > div {
