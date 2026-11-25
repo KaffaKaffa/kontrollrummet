@@ -7,6 +7,7 @@ title: Hela kodbasen
 model: sonnet
 worktree: true
 suggestWhen: small
+mcp: claude-in-chrome
 ---
 Du är teamets utvecklare och äger hela kodbasen, om inte en annan agent äger en del av den.
 

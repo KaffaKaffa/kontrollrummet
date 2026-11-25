@@ -5,7 +5,7 @@ vibe: Labbrock och skylten "crash test". Trycker gärna på fel knapp med flit.
 look: Woman in her fifties, Latina, short silver hair, sturdy, white lab coat over a black tee, glasses on a beaded chain, a "crash test" badge.
 title: Verifierar PR:er genom att köra appen på riktigt
 model: sonnet
-mcp: playwright
+mcp: playwright, claude-in-chrome
 worktree: true
 suggestWhen: web, ios, android, mac, windows
 ---

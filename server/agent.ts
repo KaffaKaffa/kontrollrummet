@@ -19,7 +19,7 @@ import { infraEnv, infraSection } from './infra.ts';
 import { devAppsSection } from './devapps.ts';
 import { accountStatus, getAccount, hasSession } from './accounts.ts';
 import { ensureWorktree } from './worktree.ts';
-import { serversFor, teamSecrets } from './mcp-servers.ts';
+import { CHROME, serversFor, teamSecrets, wantsChrome } from './mcp-servers.ts';
 import { ANY_PR_URL, prNumberOf, providerFor } from './git.ts';
 
 /** Roles that plan and follow up. They hand work out; they never do it, so they cannot edit. */
@@ -518,13 +518,16 @@ async function launch(
     '--append-system-prompt', systemPrompt(team, role, subtask, (await providerFor(repoFor(team, role, subtask).path))?.prHow ?? ''),
     // The control room's own tools never need asking about.
     // What the owner allowed on this card after Claude Code said no.
-    '--allowedTools', 'mcp__control-room', ...rulesFor(team.id, PLANNERS.has(role.kind)), ...allowedFor(subtask.id),
+    // Chrome's extension asks per site itself, so its tools need no asking here either.
+    '--allowedTools', 'mcp__control-room', ...(wantsChrome(role) ? [`mcp__${CHROME}`] : []), ...rulesFor(team.id, PLANNERS.has(role.kind)), ...allowedFor(subtask.id),
     '--disallowedTools', ...neverFor(subtask.id), ...(PLANNERS.has(role.kind) ? HANDS_OFF : []),
     // Skills and commands in the repos that the project has turned off.
     ...team.disabledSkills.map((s) => `Skill(${s})`),
   ];
   // Only "all" gets the account's own servers and connectors; everyone else exactly what it is given.
   if (role.mcp !== 'all') args.push('--strict-mcp-config');
+  // The owner's own Chrome, with their logins (its tools are allowed above).
+  if (wantsChrome(role)) args.push('--chrome');
   // Images the owner pasted into a message, and the team's generated ones: readable without asking.
   mkdirSync(join(IMAGES_DIR, team.id), { recursive: true });
   args.push('--add-dir', join(IMAGES_DIR, team.id));

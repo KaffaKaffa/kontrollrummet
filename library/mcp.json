@@ -6,6 +6,13 @@
     "suggestWhen": ["designer"],
     "config": { "type": "http", "url": "https://mcp.figma.com/mcp" }
   },
+  "claude-in-chrome": {
+    "label": "Claude i Chrome",
+    "note": "Styr ägarens egen Chrome, med hens profil och inloggningar. För att testa inloggat och verifiera i den riktiga webbläsaren. Kräver tillägget Claude in Chrome.",
+    "auth": "none",
+    "suggestWhen": ["tester", "web", "bug", "lead"],
+    "config": null
+  },
   "playwright": {
     "label": "Playwright",
     "note": "Styr en webbläsare: klicka, fyll i, ta skärmdumpar. För testaren på webbappar.",
