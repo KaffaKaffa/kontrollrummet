@@ -1312,10 +1312,6 @@ main {
     padding: var(--space-8) var(--space-16);
   }
 
-  .topbar-status {
-    display: none;
-  }
-
   main {
     padding: var(--space-16);
   }
@@ -3218,10 +3214,80 @@ main:has(.office-layout) {
 }
 
 .topbar .tabs {
-  flex: 0 1 auto;
+  flex: none;
+}
+
+/* Only the project tabs give way: they scroll sideways, everything else keeps its width. */
+.topbar .tabs-projects {
+  flex: 1 1 0;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.topbar .tabs-projects::-webkit-scrollbar {
+  display: none;
+}
+
+.topbar .devapp-bar {
+  flex: none;
+  flex-wrap: nowrap;
+}
+
+.topbar .topbar-status .status-long {
+  display: inline;
+}
+
+.topbar .topbar-status .status-short {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  .topbar {
+    gap: var(--space-8);
+  }
+
+  .topbar .devapp-bar,
+  .topbar .usage {
+    display: none;
+  }
+
+  /* Narrow window: the view tabs may scroll too, after the project tabs. */
+  .topbar .tabs-views {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .topbar .tabs-views::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .topbar .usage {
+    display: none;
+  }
+
+  .topbar .topbar-status .status-long {
+    display: none;
+  }
+
+  .topbar .topbar-status .status-short {
+    display: inline;
+  }
+}
+
+@media (max-width: 767px) {
+  .topbar .tabs-projects {
+    order: 10;
+    flex: 1 1 100%;
+  }
+
+  .topbar .topbar-status {
+    display: flex;
+  }
 }
 
 .topbar .tabs a {

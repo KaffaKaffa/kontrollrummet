@@ -1,5 +1,5 @@
 import { ConsultantDesk, ConsultantFaces, ConsultantPanel } from './consultants.tsx';
-import { Component, lazy, Suspense, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { DevAppButtons } from './devapps.tsx';
 import { awaitsReview, calledOr, nameOf, reviewText, post, useBoard, type Account, type Board, type Notice, type OwnPr, type Plan, type PlanStatus, type Role, type Subtask, type Team, type Usage } from './api.ts';
 import { Markdown } from './markdown.tsx';
@@ -1133,6 +1133,12 @@ export function App() {
   const accountCap = account?.maxAgents ?? null;
   const teamCap = view === 'gudfadern' ? null : (team?.maxAgents ?? null);
   const teamRunning = board.subtasks.filter((s) => s.status === 'running' && s.team === team?.id).length;
+  const accountLabel = account?.name ?? 'Konto';
+  const capLabel = `${accountLabel}: ${running}/${accountCap ?? '∞'} vid tangentbordet${teamCap !== null && view !== 'gudfadern' ? ` · ${team?.name ?? 'Projektet'}: ${teamRunning}/${teamCap}` : ''}`;
+  const projectTabs = useRef<HTMLElement>(null);
+  useEffect(() => {
+    projectTabs.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [view, team?.id]);
   useEffect(() => {
     document.title = total > 0 ? `(${total}) Kontrollrummet` : 'Kontrollrummet';
     // Inside Kontrollrummet.app the number goes on the Dock icon.
@@ -1148,7 +1154,7 @@ export function App() {
         <h1 className="wordmark">
           Kontroll<span>rummet</span>
         </h1>
-        <nav aria-label="Team" className="tabs">
+        <nav aria-label="Team" className="tabs tabs-projects" ref={projectTabs}>
           {board.teams.map((t) => (
             <a key={t.id} href={`#/${t.id}/${view === 'gudfadern' || view === 'new' || view === 'app' ? 'office' : view}`} aria-current={view !== 'gudfadern' && view !== 'new' && view !== 'app' && t.id === team?.id ? 'page' : undefined}>
               <Logo team={t} />
@@ -1161,7 +1167,7 @@ export function App() {
           </a>
         </nav>
         {team && view !== 'gudfadern' && view !== 'new' && view !== 'app' && (
-          <nav aria-label="Vyer" className="tabs">
+          <nav aria-label="Vyer" className="tabs tabs-views">
             <a href={`#/${team.id}/office`} aria-current={view === 'office' ? 'page' : undefined}>
               Kontoret
             </a>
@@ -1194,7 +1200,7 @@ export function App() {
           </a>
         </nav>
         <UsageMeter usage={account ? (board.usage[account.id] ?? null) : null} account={board.accounts.length > 1 ? account : undefined} />
-        <p className="topbar-status">
+        <p className="topbar-status" title={board.connected && !board.restartPending ? capLabel : undefined} aria-label={board.connected && !board.restartPending ? capLabel : undefined}>
           {board.restartPending ? (
             <span className="restart-note">
               Startar om för att ta ändringar i bruk{board.restartWaitingFor ? `, väntar på ${board.restartWaitingFor} ${board.restartWaitingFor > 1 ? 'agenter och byggen' : 'agent eller bygge'}` : ''}…
@@ -1208,15 +1214,15 @@ export function App() {
               <span className="pulse" aria-hidden="true" />
               <span className="num">
                 {running}/{accountCap === null ? '∞' : accountCap}
-              </span>{' '}
-              vid tangentbordet
+              </span>
+              <span className="status-long"> konto</span>
               {teamCap !== null && view !== 'gudfadern' && (
                 <>
                   {' · '}
                   <span className="num">
                     {teamRunning}/{teamCap}
-                  </span>{' '}
-                  i projektet
+                  </span>
+                  <span className="status-long"> projekt</span>
                 </>
               )}
             </>
