@@ -3201,9 +3201,8 @@ main:has(.office-layout) {
 }
 
 .topbar .topbar-status {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
+  /* The cap text is short and matters: the usage meter gives way first. */
+  flex: none;
   white-space: nowrap;
 }
 
