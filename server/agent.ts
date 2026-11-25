@@ -17,7 +17,7 @@ import { OWNER, withOwner } from './owner.ts';
 import { IMAGES_DIR, shownText } from './images.ts';
 import { infraEnv, infraSection } from './infra.ts';
 import { devAppsSection } from './devapps.ts';
-import { accountLabel, getAccount, isFoundry } from './accounts.ts';
+import { accountLabel, accountStatus, getAccount, hasSession, isFoundry } from './accounts.ts';
 import { ensureWorktree } from './worktree.ts';
 import { serversFor, teamSecrets } from './mcp-servers.ts';
 import { ANY_PR_URL, prNumberOf, providerFor } from './git.ts';
@@ -38,9 +38,9 @@ Du gör aldrig själva jobbet, inte ens när det verkar litet eller snabbare. Va
 const FRESH_AT = 70_000;
 
 /** What a fresh session needs to pick a card up where the last one left off. */
-function handoff(subtask: Subtask, message: string): string {
+function handoff(subtask: Subtask, message: string, why = 'Den förra blev stor, så den är stängd'): string {
   return [
-    `Du fortsätter kort #${subtask.id} i en ny session. Den förra blev stor, så den är stängd; allt du behöver står här och i repot.`,
+    `Du fortsätter kort #${subtask.id} i en ny session. ${why}; allt du behöver står här och i repot.`,
     `## Uppdraget\n\n${subtask.brief}`,
     subtask.summary || subtask.note ? `## Senaste läget\n\n${subtask.note ?? subtask.summary}` : '',
     subtask.prUrl ? `PR: ${subtask.prUrl}` : '',
@@ -538,6 +538,12 @@ async function launch(
     // A big conversation is not worth reading again for a wake-up.
     log(subtask.id, 'system', `Ny session: den förra hade vuxit till ${Math.round(subtask.contextTokens / 1000)}k.`);
     first = handoff(subtask, first);
+    subtask = patch(subtask.id, { sessionId: null, contextTokens: 0 });
+  }
+  // The project switched account, or Claude Code cleaned the session away: start over instead of failing.
+  if (subtask.sessionId && !hasSession(team.account, subtask.sessionId)) {
+    log(subtask.id, 'system', `Ny session: den förra finns inte under kontot ${getAccount(team.account).name} (bytt konto eller städad).`);
+    first = handoff(subtask, first, 'Den förra finns inte längre under projektets konto');
     subtask = patch(subtask.id, { sessionId: null, contextTokens: 0 });
   }
   if (subtask.sessionId) args.push('--resume', subtask.sessionId);

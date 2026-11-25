@@ -1134,6 +1134,10 @@ export function App() {
   const accountCap = account?.maxAgents ?? null;
   const teamCap = view === 'gudfadern' ? null : (team?.maxAgents ?? null);
   const teamRunning = board.subtasks.filter((s) => s.status === 'running' && s.team === team?.id).length;
+  // Keep the active project tab in view when the tab group scrolls sideways.
+  useEffect(() => {
+    document.querySelector('.topbar nav[aria-label="Team"] a[aria-current="page"]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [team?.id, view, board.teams.length]);
   useEffect(() => {
     document.title = total > 0 ? `(${total}) Kontrollrummet` : 'Kontrollrummet';
     // Inside Kontrollrummet.app the number goes on the Dock icon.

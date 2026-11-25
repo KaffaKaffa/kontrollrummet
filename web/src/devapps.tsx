@@ -47,11 +47,11 @@ export function DevAppButtons({ board, team, watchDevLog }: { board: Board; team
             key={a.key}
             type="button"
             className={`devapp-chip devapp-${a.status}${a.ask ? ' devapp-asks' : ''}`}
-            title={`${a.label}: ${STATUS[a.status]}${a.source ? ` från ${a.source.label}` : ''}`}
+            title={`${a.label} ${host(a.url)}: ${STATUS[a.status]}${a.source ? ` från ${a.source.label}` : ''}`}
             onClick={() => show(a.key)}
           >
             <span className="devapp-dot" aria-hidden="true" />
-            {a.label} <span className="devapp-host">{host(a.url)}</span>
+            <span className="devapp-label">{a.label}</span> <span className="devapp-host">{host(a.url)}</span>
             {(a.ask || a.queue.length > 0) && <span className="count num">{a.ask ? '?' : a.queue.length}</span>}
           </button>
         ))}

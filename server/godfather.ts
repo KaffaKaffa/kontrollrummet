@@ -7,7 +7,7 @@ import { basename, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 import { APP_ROOT, CLAUDE_BIN, DATA_DIR, PORT, expandHome } from './config.ts';
-import { getAccount, identityTerminal } from './accounts.ts';
+import { getAccount, hasSession, identityTerminal } from './accounts.ts';
 import { countAlso, runningCount } from './agent.ts';
 import { accountCap, hasRoomUnder } from './limits.ts';
 import { heldBy } from './holds.ts';
@@ -208,6 +208,8 @@ function launch(id: number, message: string) {
   if (conversation.mcp !== 'all') args.push('--strict-mcp-config');
   if (conversation.effort) args.push('--effort', conversation.effort);
   let first = message;
+  // Claude Code cleaned the session away: carry the latest over into a new one instead of failing.
+  if (conversation.sessionId && !hasSession(account, conversation.sessionId)) conversation = patch(id, { sessionId: null, contextTokens: 0 });
   if (conversation.sessionId) args.push('--resume', conversation.sessionId);
   else first = carryOver(id, message);
 

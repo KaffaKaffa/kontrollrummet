@@ -157,6 +157,21 @@ export function getAccount(id?: string | null): Account {
   return account;
 }
 
+/**
+ * Whether the profile holds this Claude Code session. A session lives under the
+ * profile it was made with (projects/<folder>/<id>.jsonl) and is gone when the
+ * project switches account or Claude Code cleans up old sessions; --resume then
+ * fails with "No conversation found".
+ */
+export function hasSession(accountId: string | null | undefined, sessionId: string): boolean {
+  const projects = join(expandHome(getAccount(accountId).claudeConfigDir), 'projects');
+  try {
+    return readdirSync(projects).some((dir) => existsSync(join(projects, dir, `${sessionId}.jsonl`)));
+  } catch {
+    return false;
+  }
+}
+
 /** Who the profile is logged in as, from its own config. Runs no model. */
 export function accountStatus(a: Account): AccountStatus {
   if (isFoundry(a)) {

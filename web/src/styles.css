@@ -3233,6 +3233,65 @@ main:has(.office-layout) {
   bottom: 0;
 }
 
+/* Only the project tabs give way: they keep a minimum width and scroll inside their group.
+   Everything else on the bar keeps its full text. */
+.topbar .tabs[aria-label='Team'] {
+  flex: 1 1 auto;
+  min-width: var(--space-160);
+}
+
+/* The app chips show the name only until the window has room for the address too. */
+.topbar .devapp-host {
+  display: none;
+}
+
+.topbar .tabs:not([aria-label='Team']),
+.topbar .devapp-bar {
+  flex: none;
+}
+
+.topbar .devapp-bar {
+  flex-wrap: nowrap;
+}
+
+.topbar .devapp-chip {
+  flex: none;
+  white-space: nowrap;
+}
+
+.topbar .topbar-status {
+  margin-left: auto;
+}
+
+.topbar .usage {
+  display: none;
+}
+
+@media (min-width: 2100px) {
+  .topbar .devapp-host {
+    display: inline;
+  }
+
+  .topbar .usage {
+    display: flex;
+    flex: none;
+  }
+
+  .topbar .usage + .topbar-status {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 1500px) {
+  .topbar .topbar-status {
+    display: none;
+  }
+
+  .topbar .tabs[aria-label='Team'] {
+    margin-right: auto;
+  }
+}
+
 /* ------------------------------------------------------------ PRs waiting for review */
 
 .notice-review > div {
@@ -3985,3 +4044,53 @@ button.link-chip {
 .approval-always { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .approval-rules { font-family: var(--mono, monospace); width: 100%; }
 .permission-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+
+/* The top bar stays one row: app chips are compact (dot and name, the port is in the tooltip),
+   never wrap, and the groups that can give way shrink before the right end leaves the window. */
+.topbar {
+  flex-wrap: nowrap;
+  max-width: 100vw;
+}
+
+.topbar .devapp-bar {
+  flex: 0 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.topbar .devapp-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.topbar .devapp-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar .devapp-host {
+  display: none;
+}
+
+.topbar .tabs:has(a[href='#/gudfadern']),
+.topbar .tabs:has(a[href='#/installningar']) {
+  flex: none;
+  overflow: visible;
+}
+
+.topbar .tabs:first-of-type {
+  flex-shrink: 1;
+}
+
+.shell {
+  min-width: 0;
+  overflow-x: clip;
+}
+
+@media (max-width: 767px) {
+  .topbar {
+    flex-wrap: wrap;
+  }
+}
