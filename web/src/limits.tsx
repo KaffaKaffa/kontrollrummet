@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { put, type Account, type Board, type Team } from './api.ts';
 import { Section, useAction } from './project.tsx';
+import { FoundryForm, FoundryRow, KindBadge } from './foundry.tsx';
 
 const WARNING = 'Utan tak kan prenumerationens egna gränser nås, och då pausar agenterna tills kvoten har återställts.';
+const FOUNDRY_WARNING = 'Utan tak kan kostnaden bli hög och resursens tokengräns (TPM) nås.';
+const warningFor = (a?: Account) => (a?.kind === 'foundry' ? FOUNDRY_WARNING : WARNING);
 
 /** A cap as a number or "Ingen gräns". Saves when changed. */
 function CapField({ value, onSave, busy }: { value: number | null; onSave: (cap: number | null) => void; busy: boolean }) {
@@ -50,27 +53,41 @@ function AccountCap({ account, teams }: { account: Account; teams: Team[] }) {
   return (
     <li className="settings-row">
       <strong>{account.name}</strong>
+      <KindBadge account={account} />
       {account.email && <small> {account.email}</small>}
       <CapField value={account.maxAgents} busy={save.busy} onSave={(cap) => void save.run(() => put(`/api/accounts/${account.id}/limit`, { maxAgents: cap }))} />
-      {account.maxAgents === null && open.length > 0 && <small className="settings-muted">{WARNING}</small>}
+      {account.maxAgents === null && open.length > 0 && <small className="settings-muted">{warningFor(account)}</small>}
       {save.error && <span className="composer-error">{save.error}</span>}
     </li>
   );
 }
 
-/** The app's own settings, outside the projects: how many agents may work at once per Claude account. */
+/** The app's own settings, outside the projects: how many agents may work at once per account. */
 export function AppSettings({ board }: { board: Board }) {
+  // 'new', or the id of the Foundry account being edited.
+  const [form, setForm] = useState<string | null>(null);
+  const editing = board.accounts.find((a) => a.id === form);
   return (
     <div className="settings">
       <Section
-        title="Claude-konton"
-        note="Högst så många agenter arbetar samtidigt på kontot, för alla projekt som använder det. Gudfaderns samtal räknas med. Ändringen gäller direkt, och kön sätter igång när taket höjs. Ett projekt kan ha ett eget tak under sina inställningar, och båda gäller."
+        title="Konton"
+        note="Högst så många agenter arbetar samtidigt på kontot, för alla projekt som använder det. Gudfaderns samtal räknas med. Ändringen gäller direkt, och kön sätter igång när taket höjs. Ett projekt kan ha ett eget tak under sina inställningar, och båda gäller. Ett konto är en Claude-prenumeration eller en Microsoft Foundry-resurs."
       >
         <ul className="settings-list">
           {board.accounts.map((a) => (
-            <AccountCap key={a.id} account={a} teams={board.teams} />
+            <div key={a.id}>
+              <AccountCap account={a} teams={board.teams} />
+              {a.kind === 'foundry' && <FoundryRow account={a} onEdit={() => setForm(a.id)} />}
+            </div>
           ))}
         </ul>
+        {form === null ? (
+          <button type="button" className="btn btn-quiet" onClick={() => setForm('new')}>
+            + Lägg till Foundry-konto
+          </button>
+        ) : (
+          <FoundryForm key={form} account={editing} onDone={() => setForm(null)} />
+        )}
       </Section>
     </div>
   );
@@ -83,7 +100,7 @@ export function TeamCap({ board, team }: { board: Board; team: Team }) {
   return (
     <Section title="Agenttak" note="Högst så många av projektets agenter arbetar samtidigt. Ett kort startar bara när både projektet och Claude-kontot har plats. Standard är ingen gräns.">
       <CapField value={team.maxAgents} busy={save.busy} onSave={(cap) => void save.run(() => put(`/api/teams/${team.id}/settings`, { maxAgents: cap }))} />
-      {team.maxAgents === null && account?.maxAgents === null && <p className="settings-muted">{WARNING}</p>}
+      {team.maxAgents === null && account?.maxAgents === null && <p className="settings-muted">{warningFor(account)}</p>}
       {save.error && <span className="composer-error">{save.error}</span>}
     </Section>
   );

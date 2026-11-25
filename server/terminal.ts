@@ -1,7 +1,7 @@
 import * as cp from 'node:child_process';
 import { dirname } from 'node:path';
 import { IS_WINDOWS } from './proc.ts';
-import { ensureSecretsDir, secretFile } from './secrets.ts';
+import { PS_READ, ensureSecretsDir, secretFile } from './secrets.ts';
 
 /**
  * A window for what needs the owner at a keyboard: logging in, saving a token,
@@ -18,6 +18,8 @@ export interface TerminalJob {
   url?: string;
   /** A secret typed at a hidden prompt and saved under this service name (keychain / DPAPI). */
   secret?: { service: string; prompt: string };
+  /** Variables whose value is a saved secret (variable → service). Read where the command runs, never put on the command line. */
+  secretEnv?: Record<string, string>;
   /** Commands as argument lists, run in order; a failing one stops the rest. */
   steps?: string[][];
 }
@@ -40,7 +42,11 @@ export function zshScript(job: TerminalJob): string {
         .map(([k, v]) => `${k}=${shellQuote(v!)}`)
         .join(' ')} `
     : '';
-  for (const step of job.steps ?? []) parts.push(`${prefix}${step.map(shellQuote).join(' ')}`);
+  // A plain assignment before env: the value is in the command's environment, not its argument list (ps).
+  const secrets = Object.entries(job.secretEnv ?? {})
+    .map(([k, svc]) => `${k}="$(security find-generic-password -s ${shellQuote(svc)} -w)" `)
+    .join('');
+  for (const step of job.steps ?? []) parts.push(`${secrets}${secrets && !prefix ? 'env ' : ''}${prefix}${step.map(shellQuote).join(' ')}`);
   return parts.join(' && ');
 }
 
@@ -50,6 +56,7 @@ export function powershellScript(job: TerminalJob): string {
   if (job.banner) lines.push(`Write-Host ${psQuote(job.banner)}`, 'Write-Host ""');
   if (job.cwd) lines.push(`Set-Location -LiteralPath ${psQuote(job.cwd)}`);
   for (const [k, v] of Object.entries(job.env ?? {})) lines.push(v ? `$env:${k} = ${psQuote(v)}` : `Remove-Item Env:${k} -ErrorAction SilentlyContinue`);
+  for (const [k, svc] of Object.entries(job.secretEnv ?? {})) lines.push(`$env:${k} = (${PS_READ(secretFile(svc))})`);
   if (job.url) lines.push(`Start-Process ${psQuote(job.url)}`);
   if (job.secret) {
     const file = secretFile(job.secret.service);

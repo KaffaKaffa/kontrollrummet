@@ -46,9 +46,21 @@ export interface Account {
   id: string;
   name: string;
   isDefault: boolean;
+  /** Missing or 'claude': a subscription login. 'foundry': Microsoft Foundry. */
+  kind?: 'claude' | 'foundry';
   loggedIn: boolean;
+  /** Claude: logged in. Foundry: key saved, or signed in to Azure. */
+  ready?: boolean;
+  detail?: string;
   email: string | null;
   organization: string | null;
+  /** Foundry only: what each model tier runs (with fallbacks), and what was entered. */
+  models?: Record<'opus' | 'sonnet' | 'haiku', string>;
+  explicit?: Partial<Record<'opus' | 'sonnet' | 'haiku', string>>;
+  auth?: 'key' | 'entra';
+  resource?: string | null;
+  baseUrl?: string | null;
+  tenant?: string | null;
   /** Most agents at once on this account; null: no limit. */
   maxAgents: number | null;
 }

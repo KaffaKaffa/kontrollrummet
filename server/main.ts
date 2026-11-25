@@ -49,7 +49,8 @@ import { addRule, isTooBroad, listRules, removeRule } from './permissions.ts';
 import { decideApproval, handleMcp, listApprovals, lockHolders, lockQueues } from './mcp.ts';
 import { IMAGE_MODEL, IMAGES_DIR, imagesAvailable, saveCardUpload } from './images.ts';
 import { getUsage, pausedUntilIso } from './usage.ts';
-import { accountsView, defaultAccountId, getAccount, identityTerminal } from './accounts.ts';
+import { accountsView, addFoundryAccount, defaultAccountId, getAccount, identityTerminal, isFoundry, removeFoundryAccount, updateFoundryAccount } from './accounts.ts';
+import { foundryLogin, testFoundry } from './foundry.ts';
 import { openTerminal } from './terminal.ts';
 import { availableServers, sourceLabel } from './mcp-servers.ts';
 import { existingIn, hostOfRepo, scanRepo, suggest, type GitHost } from './scan.ts';
@@ -312,6 +313,48 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
       throw new HttpError(409, (err as Error).message);
     }
   }
+  // Foundry accounts: added, edited, removed here. Claude accounts are found from ~/.claude*.
+  if (req.method === 'POST' && path === '/api/accounts') {
+    try {
+      const account = addFoundryAccount(await readJson(req));
+      bus.emit({ type: 'teams' });
+      return json(res, 201, { id: account.id });
+    } catch (err) {
+      throw new HttpError(400, (err as Error).message);
+    }
+  }
+  const acct = /^\/api\/accounts\/([\w.-]+)(?:\/(test|key))?$/.exec(path);
+  if (acct) {
+    const [, id, action] = acct;
+    const account = getAccount(id);
+    if (account.id !== id || !isFoundry(account)) throw new HttpError(404, 'Foundry-kontot finns inte');
+    if (req.method === 'PUT' && !action) {
+      try {
+        updateFoundryAccount(id, await readJson(req));
+      } catch (err) {
+        throw new HttpError(400, (err as Error).message);
+      }
+      bus.emit({ type: 'teams' });
+      return json(res, 200, {});
+    }
+    if (req.method === 'DELETE' && !action) {
+      const using = [...loadTeams().filter((t) => t.account === id).map((t) => `projektet ${t.name}`), ...listConversations().filter((c) => c.account === id).map((c) => `Gudfadern-samtalet ${c.title}`)];
+      if (using.length) throw new HttpError(409, `Kontot används av ${using.join(', ')}. Byt konto där först.`);
+      try {
+        const dir = removeFoundryAccount(id);
+        bus.emit({ type: 'teams' });
+        return json(res, 200, { profileDir: dir });
+      } catch (err) {
+        throw new HttpError(409, (err as Error).message);
+      }
+    }
+    if (req.method === 'POST' && action === 'key') {
+      if (account.foundry!.auth !== 'key') throw new HttpError(400, 'Kontot använder Entra ID, inte nyckel');
+      foundryLogin(id);
+      return json(res, 202, {});
+    }
+    if (req.method === 'POST' && action === 'test') return json(res, 200, { results: await testFoundry(id) });
+  }
   const login = /^\/api\/accounts\/([\w.-]+)\/login$/.exec(path);
   // The cap on agents working at once for this account: { maxAgents: number | null }, null for no limit.
   // It holds at once; the queue starts what now has room.
@@ -330,6 +373,7 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
     await readJson(req);
     const account = getAccount(login[1]);
     if (account.id !== login[1]) throw new HttpError(404, 'kontot finns inte');
+    if (isFoundry(account)) return json(res, 202, { message: foundryLogin(account.id) });
     // Claude Code logs in interactively; a Terminal with the profile set is the way.
     console.log(`[accounts] logga in ${account.id}`);
     openTerminal({ ...identityTerminal(account.id, 'logga in Claude'), steps: [[CLAUDE_BIN, '/login']] });

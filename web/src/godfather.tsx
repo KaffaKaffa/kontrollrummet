@@ -72,11 +72,12 @@ const remember = (id: string) => {
 
 function AccountSelect({ accounts, value, onChange, disabled }: { accounts: Account[]; value: string; onChange: (id: string) => void; disabled?: boolean }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} aria-label="Claude-konto">
+    <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} aria-label="Konto">
       {accounts.map((a) => (
         <option key={a.id} value={a.id}>
           {a.name}
-          {a.loggedIn ? '' : ' (inte inloggat)'}
+          {a.kind === 'foundry' ? ' (Foundry)' : ''}
+          {a.loggedIn ? '' : a.kind === 'foundry' ? ' (inte redo)' : ' (inte inloggat)'}
         </option>
       ))}
     </select>
@@ -147,14 +148,14 @@ function NewConversation({ board }: { board: Board }) {
             {folder === '__custom' && <FolderField value={custom} onChange={setCustom} placeholder="~/Dev/något" label="Sökväg" />}
           </label>
           <label className="field">
-            <span>Claude-konto</span>
+            <span>Konto</span>
             <AccountSelect accounts={board.accounts} value={account} onChange={setAccount} />
             <small>
               {accountInfo?.loggedIn ? (
-                `Inloggat som ${accountInfo.email}`
+                accountInfo.kind === 'foundry' ? `Microsoft Foundry, ${accountInfo.detail}` : `Inloggat som ${accountInfo.email}`
               ) : (
                 <button type="button" className="link-btn" onClick={() => void post(`/api/accounts/${account}/login`)}>
-                  Inte inloggat. Logga in i Terminal
+                  {accountInfo?.kind === 'foundry' ? (accountInfo.auth === 'key' ? 'Nyckel saknas. Ange den i Terminal' : 'Inte inloggad i Azure. Logga in i Terminal') : 'Inte inloggat. Logga in i Terminal'}
                 </button>
               )}
             </small>
@@ -294,7 +295,7 @@ function ConversationView({ board, conversation, loadConvEvents }: { board: Boar
           </select>
         </label>
         {account && !account.loggedIn && (
-          <button type="button" className="btn btn-quiet" onClick={() => void post(`/api/accounts/${account.id}/login`)}>
+          <button type="button" className="btn btn-quiet" onClick={() => void post(`/api/accounts/${account.id}/${account.kind === 'foundry' && account.auth === 'key' ? 'key' : 'login'}`)}>
             Logga in {account.name}
           </button>
         )}

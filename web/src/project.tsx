@@ -87,21 +87,22 @@ function General({ board, team }: { board: Board; team: Team }) {
             <input value={baseBranch} onChange={(e) => setBaseBranch(e.target.value)} />
           </label>
           <label className="field">
-            <span>Claude-konto</span>
+            <span>Konto</span>
             <select value={account} onChange={(e) => setAccount(e.target.value)}>
               {board.accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
-                  {a.loggedIn ? '' : ' (inte inloggat)'}
+                  {a.kind === 'foundry' ? ' (Foundry)' : ''}
+                  {a.loggedIn ? '' : a.kind === 'foundry' ? ' (inte redo)' : ' (inte inloggat)'}
                 </option>
               ))}
             </select>
             <small>
               {info?.loggedIn ? (
-                `Inloggat som ${info.email}. Agenterna och gh körs som det här kontot.`
+                info.kind === 'foundry' ? `Microsoft Foundry, ${info.detail}. Agenterna och gh körs som det här kontot.` : `Inloggat som ${info.email}. Agenterna och gh körs som det här kontot.`
               ) : (
-                <button type="button" className="link-btn" onClick={() => void post(`/api/accounts/${account}/login`)}>
-                  Inte inloggat. Logga in i Terminal
+                <button type="button" className="link-btn" onClick={() => void post(`/api/accounts/${account}/${info?.kind === 'foundry' && info.auth === 'key' ? 'key' : 'login'}`)}>
+                  {info?.kind === 'foundry' ? (info.auth === 'key' ? 'Nyckel saknas. Ange den i Terminal' : 'Inte inloggad i Azure. Logga in i Terminal') : 'Inte inloggat. Logga in i Terminal'}
                 </button>
               )}
             </small>

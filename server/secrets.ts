@@ -14,7 +14,7 @@ const SECRETS_DIR = join(DATA_DIR, 'secrets');
 const safe = (service: string) => service.replace(/[^\w.-]/g, '_');
 export const secretFile = (service: string) => join(SECRETS_DIR, `${safe(service)}.dpapi`);
 
-const PS_READ = (file: string) =>
+export const PS_READ = (file: string) =>
   `$s = Get-Content -LiteralPath '${file.replaceAll("'", "''")}' | ConvertTo-SecureString; [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))`;
 
 /** The secret, or null when there is none. */

@@ -87,6 +87,8 @@ curl -s -X POST http://127.0.0.1:4317/api/projects -H 'content-type: application
 
 Kontrollrummet identifierar sedan själv var projektet körs (moln, konton, felkällor) från repot och de inloggade CLI:erna, och ett första onboarding-kort låter teamet läsa in sig. Vill personen hellre göra det själv: guiden finns under **+** i appen.
 
+Vill personen köra Claude via Microsoft Foundry i stället för en prenumeration: se [`docs/foundry.md`](docs/foundry.md).
+
 ## 7. Klart
 
 Öppna appen (macOS: `open ~/Applications/Kontrollrummet.app`, Windows: Kontrollrummet i Start-menyn), och säg:

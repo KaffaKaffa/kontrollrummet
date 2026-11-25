@@ -1194,7 +1194,7 @@ export function App() {
             Appen
           </a>
         </nav>
-        <UsageMeter usage={account ? (board.usage[account.id] ?? null) : null} account={board.accounts.length > 1 ? account : undefined} />
+        {account?.kind !== 'foundry' && <UsageMeter usage={account ? (board.usage[account.id] ?? null) : null} account={board.accounts.length > 1 ? account : undefined} />}
         <p className="topbar-status">
           {board.restartPending ? (
             <span className="restart-note">

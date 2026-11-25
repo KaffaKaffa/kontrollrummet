@@ -3,7 +3,8 @@ import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { CLAUDE_BIN, DATA_DIR } from './config.ts';
-import { accountEnv, accountStatus, getAccount, identityEnv, identityTerminal, type Identity } from './accounts.ts';
+import { foundryLogin } from './foundry.ts';
+import { accountEnv, accountLabel, accountStatus, getAccount, isFoundry, identityEnv, identityTerminal, type Identity } from './accounts.ts';
 import { provider } from './git.ts';
 import { serversFor } from './mcp-servers.ts';
 import { getTeam, type Team } from './roles.ts';
@@ -157,11 +158,15 @@ export async function runChecks(t: CheckTarget, opts: { mcp?: boolean } = {}): P
   const status = accountStatus(account);
   add({
     id: 'account',
-    label: `Claude-kontot ${account.name}`,
+    label: isFoundry(account) ? `Foundry-kontot ${account.name}` : `Claude-kontot ${account.name}`,
     required: true,
-    status: status.loggedIn ? 'ok' : 'fail',
-    detail: status.loggedIn ? `Inloggat som ${status.email}` : 'Inte inloggat',
-    fix: status.loggedIn ? undefined : { label: 'Logga in', kind: 'terminal', id: 'login-claude' },
+    status: status.ready ? 'ok' : 'fail',
+    detail: isFoundry(account) ? (status.ready ? status.detail : `Inte redo: ${status.detail}`) : status.loggedIn ? `Inloggat som ${status.email}` : 'Inte inloggat',
+    fix: status.ready
+      ? undefined
+      : isFoundry(account)
+        ? { label: account.foundry!.auth === 'key' ? 'Ange nyckel' : 'Logga in i Azure', kind: 'terminal', id: 'login-foundry' }
+        : { label: 'Logga in', kind: 'terminal', id: 'login-claude' },
   });
 
   const many = t.repos.length > 1;
@@ -273,6 +278,7 @@ export async function fixCheck(t: CheckTarget, fixId: string): Promise<string> {
   console.log(`[checks] ${fixId} som ${t.account}${t.azureConfigDir ? ` (az ${t.azureConfigDir})` : ''} i ${t.repo}`);
   const cwd = existsSync(t.repo) ? t.repo : undefined;
   const as = (what: string, w: Identity = who) => identityTerminal(w, what);
+  if (fixId === 'login-foundry') return foundryLogin(t.account);
   if (fixId === 'login-claude') {
     openTerminal({ ...as('logga in Claude'), steps: [[CLAUDE_BIN, '/login']] });
     return 'Logga in i Terminal-fönstret och kör kontrollerna igen.';
