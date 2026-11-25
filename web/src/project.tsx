@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ConsultantsTab } from './consultants.tsx';
 import { DevAppsTab } from './devapps.tsx';
 import { del, nameOf, post, put, type PermissionList, type Board, type InfraItem, type Check, type CheckFor, type Existing, type ExistingSkill, type Library, type Scan, type Suggested, type Team } from './api.ts';
-import { Avatar } from './ui.tsx';
+import { Avatar, useDraft } from './ui.tsx';
 import { TeamCap } from './limits.tsx';
 import { FolderField } from './folders.tsx';
 
@@ -259,7 +259,7 @@ function DevOpsProfile({ team }: { team: Team }) {
  * text, it does what the owner wrote. The answer is saved, and shown.
  */
 function InfraPrompt({ team, placeholder }: { team: Team; placeholder: string }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useDraft(`infra:${team.id}`);
   const [answer, setAnswer] = useState<InfraAnswer | null>(null);
   const act = useAction();
   const send = () =>

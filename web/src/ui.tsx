@@ -295,7 +295,44 @@ function named(file: File): File {
   return new File([file], `skarmbild-${stamp}.${ext}`, { type: file.type });
 }
 
+const DRAFT_PREFIX = 'kr-draft:';
+
+/**
+ * Text that is written but not sent, kept per key in localStorage so it
+ * survives switching project or view (and restarting the app). An empty
+ * draft removes its key, so storage does not grow.
+ */
+export function useDraft(key: string | undefined): [string, (text: string) => void] {
+  const read = () => {
+    if (!key) return '';
+    try {
+      return localStorage.getItem(DRAFT_PREFIX + key) ?? '';
+    } catch {
+      return '';
+    }
+  };
+  const [text, setText] = useState(read);
+  const [loaded, setLoaded] = useState(key);
+  if (loaded !== key) {
+    // Same component, new context (another project or card): load that draft.
+    setLoaded(key);
+    setText(read());
+  }
+  const set = (next: string) => {
+    setText(next);
+    if (!key) return;
+    try {
+      if (next) localStorage.setItem(DRAFT_PREFIX + key, next);
+      else localStorage.removeItem(DRAFT_PREFIX + key);
+    } catch {
+      /* storage full or blocked: the draft just is not kept */
+    }
+  };
+  return [text, set];
+}
+
 export function Composer({
+  draftKey,
   placeholder,
   submitLabel,
   onSubmit,
@@ -304,6 +341,8 @@ export function Composer({
   rows = 3,
   label,
 }: {
+  /** Where the unsent text is kept, e.g. `task:team:bug`. Without it nothing is kept. */
+  draftKey?: string;
   placeholder: string;
   submitLabel: string;
   /** The text with any attachments' paths already in it, and the attachments. */
@@ -314,7 +353,7 @@ export function Composer({
   rows?: number;
   label?: string;
 }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useDraft(draftKey);
   const [files, setFiles] = useState<Attached[]>([]);
   const [uploading, setUploading] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -661,6 +700,7 @@ export function CardDetail({
       <Log events={events} team={team} role={role} />
       <LoginPrompt subtask={subtask} owner={owner} />
       <Composer
+        draftKey={`card:${subtask.id}`}
         rows={2}
         placeholder={`Skriv till ${nameOf(role) ?? 'agenten'}…`}
         submitLabel="Skicka"

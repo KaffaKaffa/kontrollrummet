@@ -125,6 +125,7 @@ function NewTask({ board }: { board: TeamBoard }) {
           </button>
         </div>
         <Composer
+          draftKey={`task:${board.team.id}:${target}`}
           placeholder={placeholder}
           rows={target === 'bug' ? 6 : 3}
           submitLabel={target === 'bug' ? `Lämna till ${calledOr(bug, 'Bug')}` : target === 'plan' ? 'Börja planera' : 'Skicka'}
