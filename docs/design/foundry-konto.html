@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<title>Skiss: Foundry-konto i Inställningar</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Values copied from web/src/tokens.css (light theme). All names and values in the mockups are made up. */
+:root{
+  --bg-canvas:#fcfcff;--bg-raised:#fff;--bg-sunken:#f1f0f6;--surface-2:#f8f7fc;--surface-3:#f1f0f6;
+  --fg:#0b0a0f;--fg-2:#4b4a52;--fg-3:#63626c;--fg-dis:#b1b0b9;
+  --line:#d5d3dc;--line-hair:#e5e4eb;--line-control:#898792;--focus:#7f44ee;
+  --brand:#7f44ee;--brand-hover:#6b31ce;--brand-tint:#9263fd14;--brand-text:#6b31ce;
+  --ok:#007338;--ok-tint:#00a3531a;--warn:#9b6700;--warn-tint:#b67b001f;--warn-text:#664300;
+  --bad:#d80023;--bad-tint:#eb40421a;--bad-text:#b4001b;
+  --r12:12px;--r8:8px;--full:999px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg-sunken);color:var(--fg);font:14px/1.45 system-ui,sans-serif;padding:32px}
+h1{font-size:22px;margin:0 0 4px}
+h2{font-size:16px;margin:40px 0 4px}
+.lead{color:var(--fg-2);max-width:760px;margin:0 0 8px}
+.frames{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start;margin-top:12px}
+.frame{background:var(--bg-canvas);border:1px solid var(--line);border-radius:var(--r12);padding:20px;width:640px}
+.frame.narrow{width:420px}
+.cap{font-size:12px;color:var(--fg-3);margin:0 0 6px;text-transform:uppercase;letter-spacing:.04em}
+.sect{background:var(--bg-raised);border:1px solid var(--line-hair);border-radius:var(--r12);padding:16px}
+.sect h3{margin:0 0 4px;font-size:15px}
+.note{color:var(--fg-3);font-size:12.5px;margin:0 0 12px}
+.row{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line-hair)}
+.row:first-of-type{border-top:0}
+.row .main{flex:1;min-width:0}
+.row strong{font-size:14px}
+.sub{color:var(--fg-3);font-size:12.5px}
+.badge{display:inline-block;font-size:11px;padding:1px 8px;border-radius:var(--full);background:var(--surface-3);color:var(--fg-2);margin-left:6px;vertical-align:1px}
+.badge.f{background:var(--brand-tint);color:var(--brand-text)}
+.badge.ok{background:var(--ok-tint);color:var(--ok)}
+.badge.warn{background:var(--warn-tint);color:var(--warn-text)}
+.badge.bad{background:var(--bad-tint);color:var(--bad-text)}
+.btn{font:inherit;font-size:13px;padding:6px 12px;border-radius:var(--r12);border:1px solid var(--line-control);background:var(--bg-raised);color:var(--fg)}
+.btn.p{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.dis{color:var(--fg-dis);border-color:var(--line)}
+.link{color:var(--brand-text);text-decoration:underline;font-size:12.5px}
+.field{display:block;margin:0 0 12px}
+.field>span{display:block;font-size:12.5px;font-weight:600;margin-bottom:3px}
+.input{border:1px solid var(--line-control);border-radius:var(--r8);padding:6px 10px;background:var(--bg-raised);min-height:32px;color:var(--fg)}
+.input.ph{color:var(--fg-3)}
+.input.err{border-color:var(--bad)}
+.input.foc{border-color:var(--focus);box-shadow:0 0 0 2px var(--brand-tint)}
+.help{font-size:12px;color:var(--fg-3);margin-top:3px}
+.help.err{color:var(--bad-text)}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.radio{display:flex;gap:8px;align-items:flex-start;margin-bottom:6px}
+.dot{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--line-control);margin-top:2px;flex:none}
+.dot.on{border-color:var(--brand);background:radial-gradient(var(--brand) 45%,transparent 50%)}
+.result{border:1px solid var(--line-hair);border-radius:var(--r8);margin-top:10px}
+.result div{display:flex;gap:8px;padding:6px 10px;border-top:1px solid var(--line-hair);font-size:13px}
+.result div:first-child{border-top:0}
+.result .t{width:60px;font-weight:600}
+.result .m{flex:1}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:4px 12px;font-size:13px;margin:8px 0}
+.kv dt{color:var(--fg-3)}.kv dd{margin:0}
+.bar{height:6px;border-radius:3px;background:var(--surface-3);width:180px;display:inline-block;vertical-align:middle}
+.bar i{display:block;height:100%;border-radius:3px;background:var(--brand)}
+.callout{background:var(--surface-2);border:1px solid var(--line-hair);border-radius:var(--r8);padding:8px 10px;font-size:12.5px;color:var(--fg-2);margin-top:8px}
+.build{max-width:900px;background:var(--bg-raised);border:1px solid var(--line-hair);border-radius:var(--r12);padding:8px 20px 16px;margin-top:12px}
+.build li{margin:4px 0}
+code{background:var(--surface-3);padding:0 4px;border-radius:4px;font-size:12.5px}
+</style>
+</head>
+<body>
+<h1>Foundry-konto i Inställningar (skiss, kort #262)</h1>
+<p class="lead">Skissar för <code>web/src/limits.tsx</code> (<code>AppSettings</code>) och <code>web/src/project.tsx</code> (kontoval). Utgår från planen för Microsoft Foundry som AI-leverantör. Alla namn, resurser och värden är påhittade. Färger och radier är värdena ur <code>tokens.css</code>, så bygg med <code>var(--color-…)</code> och befintliga klasser (<code>settings-row</code>, <code>btn</code>, <code>link-btn</code>).</p>
+
+<!-- 1 -->
+<h2>1. Kontolistan: typ synlig</h2>
+<p class="lead">Rubriken blir "Konton". Varje rad visar typmärke. Claude-raden är som i dag. Foundry-raden visar resurs och autentisering där Claude visar e-post och organisation. Taket (agenter samtidigt) är samma fält på båda.</p>
+<div class="frames">
+ <div class="frame">
+  <p class="cap">A. Lista, båda typerna redo</p>
+  <div class="sect">
+   <h3>Konton</h3>
+   <p class="note">Högst så många agenter arbetar samtidigt på kontot, för alla projekt som använder det. Gudfaderns samtal räknas med. …</p>
+   <div class="row"><div class="main"><strong>Privat</strong><span class="badge">Claude</span><br><span class="sub">kim@example.org · Exempelbolaget</span></div><span class="badge ok">Inloggad</span><span class="sub">Tak <span class="input" style="padding:2px 8px">3</span></span></div>
+   <div class="row"><div class="main"><strong>Foundry</strong><span class="badge f">Microsoft Foundry</span><br><span class="sub">Resurs <code>exempel-resurs</code> · Entra ID</span></div><span class="badge ok">Redo</span><button class="btn">Testa anslutningen</button><span class="sub">Tak <span class="input" style="padding:2px 8px">–</span></span></div>
+   <div class="callout" style="border-color:var(--warn)">Foundry-kontot har inget tak: utan tak kan kostnaden bli hög och resursens tokengräns (TPM) nås.</div>
+   <div style="margin-top:12px"><button class="btn">+ Lägg till Foundry-konto</button></div>
+  </div>
+ </div>
+ <div class="frame">
+  <p class="cap">B. Lista, Foundry-konto inte redo (två varianter)</p>
+  <div class="sect">
+   <div class="row"><div class="main"><strong>Foundry</strong><span class="badge f">Microsoft Foundry</span><br><span class="sub">Resurs <code>exempel-resurs</code> · Entra ID</span></div><span class="badge warn">Inte inloggad i Azure</span><button class="btn p">Logga in i Azure</button></div>
+   <div class="row"><div class="main"><strong>Foundry nyckel</strong><span class="badge f">Microsoft Foundry</span><br><span class="sub">Resurs <code>annan-resurs</code> · API-nyckel</span></div><span class="badge warn">Nyckel saknas</span><button class="btn p">Ange nyckel</button></div>
+   <p class="help">Knappen öppnar Terminal: "Logga in i Azure" kör <code>az login</code> med kontots egen az-profil, "Ange nyckel" frågar efter nyckeln utan att visa den. Samma mönster som "Logga in" för Claude-konton.</p>
+  </div>
+ </div>
+</div>
+
+<!-- 2 -->
+<h2>2. Formulär: nytt Foundry-konto</h2>
+<p class="lead">Öppnas som panel under listan (samma mönster som övriga formulär i inställningarna). Samma formulär redigerar ett befintligt konto. Fält i ordning: namn, resurs, autentisering, deployments, budget.</p>
+<div class="frames">
+ <div class="frame">
+  <p class="cap">A. Tomt, Entra ID valt (standard)</p>
+  <div class="sect">
+   <h3>Lägg till Foundry-konto</h3>
+   <label class="field"><span>Namn</span><div class="input ph">Foundry</div></label>
+   <label class="field"><span>Resurs eller endpoint</span><div class="input ph">exempel-resurs  eller  https://exempel-resurs.services.ai.azure.com</div><div class="help">Resursnamnet, eller hela adressen. Servern rättar till formen.</div></label>
+   <div class="field"><span>Autentisering</span>
+    <div class="radio"><i class="dot on"></i><div>Entra ID (az login) <span class="badge ok">Rekommenderas</span><div class="help">Kräver rollen Foundry User på resursen. Ingen nyckel lagras.</div></div></div>
+    <div class="radio"><i class="dot"></i><div>API-nyckel<div class="help">Ligger i nyckelringen, aldrig i en fil.</div></div></div>
+    <div style="margin-left:22px"><label class="field"><span>Tenant (valfritt)</span><div class="input ph">t.ex. exempel.onmicrosoft.com</div></label>
+    <label class="field"><span>Az-profil</span><div class="input">Egen för kontot (standard) ▾</div><div class="help">Eller en befintlig profil, t.ex. <code>~/.azure</code>.</div></label></div>
+   </div>
+   <div class="field"><span>Deployments (minst en)</span>
+    <div class="grid3"><div><div class="help" style="margin:0 0 3px">Opus</div><div class="input ph">claude-opus-…</div></div><div><div class="help" style="margin:0 0 3px">Sonnet</div><div class="input ph">claude-sonnet-…</div></div><div><div class="help" style="margin:0 0 3px">Haiku</div><div class="input ph">claude-haiku-…</div></div></div>
+    <div class="help">Namnet du gav deploymenten i Foundry. Döp den gärna till modellens id, så känner Claude Code igen den. Tom nivå: se "Kör nu" nedan.</div>
+    <div class="callout">Kör nu: Opus → <code>claude-opus-…</code> · Sonnet → <code>claude-sonnet-…</code> · Haiku → använder Sonnet</div>
+   </div>
+   <label class="field"><span>Månadsbudget i USD (valfritt)</span><div class="input ph" style="width:140px">ingen</div><div class="help">Når kostnaden budgeten pausas kontot till månadsskiftet.</div></label>
+   <div style="display:flex;gap:8px;align-items:center"><button class="btn p">Spara</button><button class="btn">Avbryt</button><a class="link" style="margin-left:auto">Hur sätter jag upp Foundry?</a></div>
+  </div>
+ </div>
+ <div class="frame">
+  <p class="cap">B. API-nyckel valt, med fel vid fältet</p>
+  <div class="sect">
+   <h3>Lägg till Foundry-konto</h3>
+   <label class="field"><span>Namn</span><div class="input">Foundry nyckel</div></label>
+   <label class="field"><span>Resurs eller endpoint</span><div class="input err">https://exempel.example.com</div><div class="help err">Det här är ingen Foundry-adress. Skriv resursnamnet eller en adress som slutar på services.ai.azure.com.</div></label>
+   <div class="field"><span>Autentisering</span>
+    <div class="radio"><i class="dot"></i><div>Entra ID (az login)</div></div>
+    <div class="radio"><i class="dot on"></i><div>API-nyckel</div></div>
+    <div class="callout" style="margin-left:22px">Nyckeln frågas efter i Terminal direkt efter att du sparat. Den skrivs aldrig i ett fält här.</div>
+   </div>
+   <div class="field"><span>Deployments (minst en)</span>
+    <div class="grid3"><div class="input err">&nbsp;</div><div class="input err">&nbsp;</div><div class="input err">&nbsp;</div></div>
+    <div class="help err">Fyll i minst en deployment.</div></div>
+   <div style="display:flex;gap:8px"><button class="btn p">Spara</button><button class="btn">Avbryt</button></div>
+   <p class="help">Efter "Spara" med nyckel: panelen stängs, Terminal öppnas, raden visar "Nyckel saknas" tills den är inskriven.</p>
+  </div>
+ </div>
+</div>
+
+<!-- 3 -->
+<h2>3. Testa anslutningen</h2>
+<p class="lead">Knappen finns på kontoraden och i formuläret efter sparning. Resultatet visas inline under kontot och sparas inte. Texten bredvid knappen är ärlig om kostnaden. Ett resultat per nivå som har en deployment.</p>
+<div class="frames">
+ <div class="frame">
+  <p class="cap">A. Pågår</p>
+  <div class="sect"><div class="row"><div class="main"><strong>Foundry</strong><span class="badge f">Microsoft Foundry</span></div><button class="btn dis">Testar …</button></div>
+   <div class="result"><div><span class="t">Opus</span><span class="m sub">Väntar …</span></div><div><span class="t">Sonnet</span><span class="m sub">Väntar …</span></div></div>
+   <p class="help">Kör en kort fråga per nivå (bråkdelar av en krona, Opus mest). Tar upp till en minut.</p></div>
+ </div>
+ <div class="frame">
+  <p class="cap">B. Lyckat</p>
+  <div class="sect"><div class="row"><div class="main"><strong>Foundry</strong><span class="badge f">Microsoft Foundry</span></div><span class="badge ok">Anslutningen fungerar</span><button class="btn">Testa igen</button></div>
+   <div class="result"><div><span class="t">Opus</span><span class="badge ok">OK</span><span class="m">1,8 s · <code>claude-opus-…</code></span></div><div><span class="t">Sonnet</span><span class="badge ok">OK</span><span class="m">1,1 s · <code>claude-sonnet-…</code></span></div><div><span class="t">Haiku</span><span class="m sub">Ingen deployment, använder Sonnet</span></div></div></div>
+ </div>
+ <div class="frame">
+  <p class="cap">C. Misslyckat (blandat resultat)</p>
+  <div class="sect"><div class="row"><div class="main"><strong>Foundry</strong><span class="badge f">Microsoft Foundry</span></div><span class="badge bad">Anslutningen misslyckades</span><button class="btn">Testa igen</button></div>
+   <div class="result"><div><span class="t">Opus</span><span class="badge bad">Fel</span><span class="m">Deploymenten <code>claude-opus-…</code> finns inte. Kontrollera namnet i Foundry-portalen. <a class="link">Redigera kontot</a></span></div><div><span class="t">Sonnet</span><span class="badge ok">OK</span><span class="m">1,3 s</span></div></div>
+   <p class="help">Felklasser (en text per fel, med vad man gör): Resursen finns inte · Nyckeln stämmer inte · Inte inloggad i Azure (knapp "Logga in i Azure") · Saknar rollen Foundry User på resursen · Deploymenten X finns inte · Tokengräns nådd.</p></div>
+ </div>
+</div>
+
+<!-- 4 -->
+<h2>4. Foundry-kontots detalj: ärligt om kvot</h2>
+<p class="lead">Där Claude-konton visar inloggning, organisation och usage-staplar (5 h/vecka) visar Foundry inga staplar, eftersom gränserna inte finns. I stället kostnad, och en text som säger varför.</p>
+<div class="frames">
+ <div class="frame">
+  <p class="cap">Claude-konto (som i dag, för jämförelse)</p>
+  <div class="sect"><strong>Privat</strong><span class="badge">Claude</span>
+   <dl class="kv"><dt>Inloggning</dt><dd>kim@example.org</dd><dt>Organisation</dt><dd>Exempelbolaget</dd><dt>Modeller</dt><dd>Prenumerationens modeller</dd><dt>5 timmar</dt><dd><span class="bar"><i style="width:42%"></i></span> 42 %</dd><dt>Vecka</dt><dd><span class="bar"><i style="width:18%"></i></span> 18 %</dd></dl></div>
+ </div>
+ <div class="frame">
+  <p class="cap">Foundry-konto</p>
+  <div class="sect"><strong>Foundry</strong><span class="badge f">Microsoft Foundry</span>
+   <dl class="kv"><dt>Resurs</dt><dd><code>exempel-resurs</code></dd><dt>Autentisering</dt><dd>Entra ID · <span class="badge ok">Redo</span></dd><dt>Modeller</dt><dd>Opus → <code>claude-opus-…</code><br>Sonnet → <code>claude-sonnet-…</code><br>Haiku → använder Sonnet</dd><dt>Kostnad</dt><dd>Idag $1,20 · denna månad $38,40 <span class="sub">(av budget $100)</span></dd><dt></dt><dd><span class="bar"><i style="width:38%"></i></span></dd></dl>
+   <div class="callout">Foundry har inga 5-timmarsgränser. Du betalar per token till Azure. Beloppet är Claude Codes uppskattning, fakturan i Azure är facit.</div>
+   <p class="help">Budgetstapeln visas bara om en budget är satt. Utan budget: bara siffrorna. Är budgeten nådd: raden får <span class="badge warn">Pausad till 1 dec</span> och texten "Höj budgeten eller vänta till den 1:a."</p></div>
+ </div>
+</div>
+
+<!-- 5 -->
+<h2>5. Val av konto per projekt</h2>
+<p class="lead">Samma <code>&lt;select&gt;</code> som i dag under projektets inställningar och i "Nytt projekt". Båda typerna ligger i samma lista, med typen efter namnet. Under väljaren: Claude-konto utan inloggning ger "Logga in", Foundry-konto som inte är redo ger knappen från bild 1B. Ett projekt kan alltså ligga på Foundry medan ett annat ligger på prenumerationen.</p>
+<div class="frames">
+ <div class="frame narrow">
+  <p class="cap">A. Väljare öppen</p>
+  <label class="field"><span>Konto</span><div class="input foc">Foundry · Microsoft Foundry ▾</div></label>
+  <div class="sect" style="padding:4px 0"><div style="padding:6px 12px">Privat <span class="sub">· Claude</span></div><div style="padding:6px 12px;background:var(--brand-tint)">Foundry <span class="sub">· Microsoft Foundry</span></div><div style="padding:6px 12px">Foundry nyckel <span class="sub">· Microsoft Foundry</span></div></div>
+ </div>
+ <div class="frame narrow">
+  <p class="cap">B. Valt Foundry-konto, redo</p>
+  <label class="field"><span>Konto</span><div class="input">Foundry · Microsoft Foundry ▾</div></label>
+  <p class="help">Foundry-konto, resurs <code>exempel-resurs</code>. Kostnad denna månad $38,40.</p>
+ </div>
+ <div class="frame narrow">
+  <p class="cap">C. Valt Foundry-konto, inte redo</p>
+  <label class="field"><span>Konto</span><div class="input">Foundry · Microsoft Foundry ▾</div></label>
+  <div class="callout" style="border-color:var(--warn)">Foundry-kontot kom inte in i Azure. <button class="btn p" style="margin-left:6px">Logga in i Azure</button></div>
+ </div>
+</div>
+
+<h2>Bygganteckningar</h2>
+<div class="build"><ul>
+ <li><b>Märket</b> "Microsoft Foundry" (tintad lila, <code>brand-tint</code>/<code>brand-text</code>) och "Claude" (neutral <code>surface-3</code>) är en liten komponent, <code>AccountKind</code>. Visas i listan, väljaren och kontodetaljen.</li>
+ <li><b>Rubriken</b> "Claude-konton" i <code>AppSettings</code> blir "Konton". Textstycket om tak gäller båda typerna.</li>
+ <li><b>Taket</b> (<code>CapField</code>) är oförändrat. För Foundry byts varningstexten (<code>WARNING</code>) mot den om kostnad och TPM i 1A.</li>
+ <li><b>Kvot</b>: inga staplar för Foundry. Kostnaden kommer från <code>spend</code> i usage (se planen). Texten under är fast.</li>
+ <li><b>Knappar per läge</b>: Claude utloggad "Logga in"; Foundry Entra "Logga in i Azure"; Foundry nyckel "Ange nyckel". "Testa anslutningen" bara på Foundry. Ta bort-knapp nekas om ett projekt använder kontot, och listar vilka.</li>
+ <li><b>Fel vid fältet</b> använder <code>line-… danger</code> och <code>state-danger-text</code>. Lyckat/misslyckat använder <code>state-success</code>/<code>state-danger</code> tintar. Både text och färg bär beskedet, så inget bygger på bara färg.</li>
+ <li><b>Hemligheter</b>: ingen nyckel visas eller skrivs i något fält i appen, bara i Terminal-flödet.</li>
+ <li><b>Mörkt tema</b>: skissen visar ljust. Använd tokens, så följer mörkt med.</li>
+</ul></div>
+</body>
+</html>
