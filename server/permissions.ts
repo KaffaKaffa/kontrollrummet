@@ -83,7 +83,9 @@ export function isTooBroad(rule: string): string | null {
   if (SHELLS.test(first)) return `${first} kör vad som helst och kan inte tillåtas som regel.`;
   if (/^rm\s+-\w*[rf]\w*\s*$/.test(prefix) || /^rm\s+-\w*[rf]\w*\s+(-\w+\s*)*[/~*.]?\s*$/.test(prefix)) return 'rm -rf måste ange en sökväg.';
   if (/(curl|wget)\b.*\|\s*(ba|z)?sh/.test(prefix)) return 'Hämta och kör i ett steg kan inte tillåtas.';
-  if (neverRulesHit(prefix).length) return 'Regeln träffar något som aldrig får tillåtas (release, deploy, merge).';
+  // A prefix rule matches every command that starts with it, so test what it can grow into too
+  // ("npm run release" matches "npm run release:ios", which a NEVER glob catches).
+  if ([prefix, `${prefix}:x`, `${prefix} x`].some((c) => neverRulesHit(c).length)) return 'Regeln träffar något som aldrig får tillåtas (release, deploy, merge).';
   return null;
 }
 

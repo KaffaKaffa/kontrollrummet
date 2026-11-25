@@ -6,9 +6,10 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
-import { APP_ROOT, CLAUDE_BIN, DATA_DIR, MAX_CONCURRENT, PORT, expandHome } from './config.ts';
+import { APP_ROOT, CLAUDE_BIN, DATA_DIR, PORT, expandHome } from './config.ts';
 import { getAccount, identityTerminal } from './accounts.ts';
 import { countAlso, runningCount } from './agent.ts';
+import { accountCap, hasRoomUnder } from './limits.ts';
 import { heldBy } from './holds.ts';
 import { bus } from './bus.ts';
 import { NEVER, CONTROL_ROOM_TOOL_MS, claudeEnv, contextOf, describeTool, toolResultText, userLine } from './claude-run.ts';
@@ -181,7 +182,7 @@ function launch(id: number, message: string) {
     return;
   }
   // the owner asked for it, so it does not queue; but say so when the account is already busy.
-  if (runningCount(account) >= MAX_CONCURRENT) {
+  if (!hasRoomUnder(runningCount(account), accountCap(account))) {
     log(id, 'system', `Kontot kör redan ${runningCount(account)} agenter. Samtalet startar ändå; kort som väcks väntar tills det finns plats.`);
   }
   const token = randomBytes(24).toString('hex');
