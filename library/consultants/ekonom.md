@@ -1,5 +1,5 @@
 ---
-name: Ekonom
+name: Ekonomkonsult
 title: Prissättning, moms, avgifter i appbutiker, abonnemang och kalkyler
 kind: text
 provider: openai
