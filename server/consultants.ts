@@ -650,6 +650,18 @@ export function compatStatus() {
     providers: (['foundry', 'openai-compatible'] as const).map((p) => ({ provider: p, hasKey: Boolean(keyOf(p)), hasEndpoint: Boolean(compatEndpoint(p)) })),
   };
 }
+/**
+ * Model profiles for the deployment picker: what a deployment is good for and an example of a
+ * model that fits. The deployment name is whatever the owner called it, so `deployment` is only a
+ * suggestion to start from. No resource names or endpoints here.
+ */
+export const COMPAT_PROFILES = [
+  { id: 'allround', label: 'Allroundtext', deployment: 'mistral-large', why: 'Bra första val: god svenska, instruktioner och sammanfattningar till rimligt pris.' },
+  { id: 'reasoning', label: 'Resonemangsgranskare', deployment: 'deepseek-r1', why: 'Tänker steg för steg: granskar kod, planer och slutsatser. Långsammare och dyrare per fråga.' },
+  { id: 'fast', label: 'Snabb och billig', deployment: 'mistral-small', why: 'Korta frågor, klassning, omskrivning och utkast där svarstiden och kostnaden spelar roll.' },
+  { id: 'documents', label: 'Dokumentfrågor', deployment: 'command-a', why: 'Långa texter i frågan och svar som håller sig till dem: avtal, rapporter, loggar.' },
+] as const;
+
 /** Requests today, counted from the consultation log. */
 function compatUsedToday(): number {
   try {

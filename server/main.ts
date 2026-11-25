@@ -15,6 +15,9 @@ import {
   pickPortrait,
   providerStatus,
   copilotStatus,
+  compatStatus,
+  saveCompatSettings,
+  COMPAT_PROFILES,
   saveCopilotLimits,
   PROVIDERS,
   removeConsultant,
@@ -506,6 +509,23 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
       }
     }
     return json(res, 200, await copilotStatus());
+  }
+  if (path === '/api/consultants/compat' && (req.method === 'GET' || req.method === 'PUT')) {
+    // Endpoints and the day limit for Foundry and other OpenAI-compatible providers. Addresses are never sent back.
+    if (req.method === 'PUT') {
+      const body = (await readJson(req)) as { endpoints?: Record<string, unknown>; day?: unknown };
+      const endpoints: Record<string, string> = {};
+      for (const p of ['foundry', 'openai-compatible']) {
+        const v = body.endpoints?.[p];
+        if (typeof v === 'string') endpoints[p] = v;
+      }
+      try {
+        saveCompatSettings({ endpoints, day: body.day });
+      } catch (err) {
+        throw new HttpError(400, (err as Error).message);
+      }
+    }
+    return json(res, 200, { ...compatStatus(), profiles: COMPAT_PROFILES });
   }
   const face = /^\/api\/faces\/([\w-]+)$/.exec(path);
   if (req.method === 'GET' && face) {
