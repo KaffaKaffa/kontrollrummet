@@ -298,7 +298,82 @@ export function ConsultantPanel({ c, team, roles, consultations, onClose }: { c:
 const fits = (kind: Consultant['kind'], id: string) =>
   kind === 'image' ? /image/.test(id) : !/image|audio|realtime|transcribe|tts|embedding|whisper|dall-e|moderation|search|computer|codex|veo|imagen|live/.test(id);
 
+interface CopilotModel {
+  id: string;
+  name: string;
+  price?: { input: number; output: number };
+}
+interface CopilotStatus {
+  hasKey: boolean;
+  limits: { card: number; day: number };
+  usedToday: number;
+  quota?: { plan?: string; remainingPercent?: number; resetDate?: string; unlimited: boolean };
+  models: CopilotModel[];
+  error?: string;
+}
+
+const makerOf = (id: string) => (/^claude/.test(id) ? 'Anthropic' : /^(gpt|o\d|chatgpt)/.test(id) ? 'OpenAI' : /^gemini/.test(id) ? 'Google' : 'Andra');
+const credits = (n: number) => (n >= 10 ? Math.round(n) : Math.round(n * 100) / 100);
+
+/** Copilot's models grouped by maker, with the price in credits per million tokens. */
+function CopilotModelPicker({ value, onChange }: { value: string; onChange: (m: string) => void }) {
+  const [models, setModels] = useState<CopilotModel[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetch('/api/consultants/copilot')
+      .then(async (r) => {
+        const data = (await r.json()) as CopilotStatus & { error?: string };
+        if (!r.ok) throw new Error(data.error ?? `HTTP ${r.status}`);
+        if (live) {
+          setModels(data.models.filter((m) => fits('text', m.id)));
+          if (data.error) setError(data.error);
+        }
+      })
+      .catch((err: Error) => live && setError(err.message));
+    return () => {
+      live = false;
+    };
+  }, []);
+  if (!models?.length) return <ModelInput value={value} onChange={onChange} placeholder={error ? 'Skriv modellens id' : 'Hämtar modellerna …'} error={error} />;
+  const groups = ['Anthropic', 'OpenAI', 'Google', 'Andra'].map((g) => [g, models.filter((m) => makerOf(m.id) === g)] as const).filter(([, l]) => l.length);
+  return (
+    <label className="field">
+      <span>Modell</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {!models.some((m) => m.id === value) && <option value={value}>{value || 'Välj modell'}</option>}
+        {groups.map(([g, list]) => (
+          <optgroup key={g} label={g}>
+            {list.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name} {m.price ? `· ${credits(m.price.input)} / ${credits(m.price.output)} credits per miljon tokens` : '· pris okänt'}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+      <small className="settings-muted">Pris: credits in / ut per miljon tokens (1 credit = 0,01 USD).</small>
+      {error && <small className="settings-muted">{error}</small>}
+    </label>
+  );
+}
+
+function ModelInput({ value, onChange, placeholder, error }: { value: string; onChange: (m: string) => void; placeholder: string; error: string | null }) {
+  return (
+    <label className="field">
+      <span>Modell</span>
+      <input className="mono" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      {error && <small className="settings-muted">{error}</small>}
+    </label>
+  );
+}
+
 function ModelPicker({ provider, kind, value, onChange }: { provider: ConsultantProvider; kind: Consultant['kind']; value: string; onChange: (m: string) => void }) {
+  if (provider === 'copilot') return <CopilotModelPicker value={value} onChange={onChange} />;
+  return <PlainModelPicker provider={provider} kind={kind} value={value} onChange={onChange} />;
+}
+
+function PlainModelPicker({ provider, kind, value, onChange }: { provider: ConsultantProvider; kind: Consultant['kind']; value: string; onChange: (m: string) => void }) {
   const [models, setModels] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -560,6 +635,71 @@ function ConsultantForm({ team, roles, c, catalog, reload }: { team: Team; roles
  * at a hidden prompt, and kept by the operating system: the keychain on a Mac,
  * encrypted for the signed-in user on Windows. Never in a file in the repo.
  */
+/** The Copilot row under API-nycklar: status, plan, what is left of the month, and the limits that can be changed. */
+function CopilotRow({ reload }: { reload: () => void }) {
+  const [st, setSt] = useState<CopilotStatus | null>(null);
+  const [card, setCard] = useState('');
+  const [day, setDay] = useState('');
+  const [saved, setSaved] = useState(false);
+  const save = useAction();
+  const load = () =>
+    fetch('/api/consultants/copilot')
+      .then((r) => r.json() as Promise<CopilotStatus>)
+      .then((d) => {
+        setSt(d);
+        setCard(String(d.limits.card));
+        setDay(String(d.limits.day));
+      })
+      .catch(() => undefined);
+  useEffect(() => {
+    void load();
+  }, []);
+  if (!st) return null;
+  const q = st.quota;
+  const left = q?.unlimited ? 'Obegränsat' : q?.remainingPercent !== undefined ? `${Math.round(q.remainingPercent)} % kvar av månaden` : 'Kvoten okänd';
+  const changed = card !== String(st.limits.card) || day !== String(st.limits.day);
+  return (
+    <div className="copilot-row">
+      <div className="copilot-head">
+        <span className={`dot ${st.hasKey ? 'dot-ok' : 'dot-missing'}`} aria-hidden="true" />
+        <strong>Copilot</strong>
+        <span className="settings-muted">{st.hasKey ? 'Inloggad' : 'Token saknas'}</span>
+        {q?.plan && <span className="settings-muted">Plan: {q.plan}</span>}
+        {st.hasKey && <span className="num">{left}</span>}
+        {q?.resetDate && <span className="settings-muted">Nollställs {new Date(q.resetDate).toLocaleDateString('sv-SE')}</span>}
+      </div>
+      {st.error && <span className="composer-error">{st.error}</span>}
+      <form
+        className="copilot-limits"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save.run(async () => {
+            await put('/api/consultants/copilot', { card: Number(card), day: Number(day) });
+            await load();
+            setSaved(true);
+            reload();
+          });
+        }}
+      >
+        <label className="field">
+          <span>Gräns per kort (credits)</span>
+          <input type="number" min="1" step="any" value={card} onChange={(e) => { setCard(e.target.value); setSaved(false); }} />
+        </label>
+        <label className="field">
+          <span>Gräns per dag (credits)</span>
+          <input type="number" min="1" step="any" value={day} onChange={(e) => { setDay(e.target.value); setSaved(false); }} />
+        </label>
+        <button type="submit" className="btn" disabled={save.busy || !changed}>
+          Spara gränser
+        </button>
+        {saved && !changed && <span className="saved">Sparat</span>}
+      </form>
+      <p className="settings-muted">Använt idag: {credits(st.usedToday)} av {st.limits.day} credits. När en gräns är nådd nekas frågorna och kortet får en notis.</p>
+      {save.error && <span className="composer-error">{save.error}</span>}
+    </div>
+  );
+}
+
 function ApiKeys({ catalog, reload }: { catalog: Catalog; reload: () => void }) {
   const open = useAction();
   const [opened, setOpened] = useState(false);
@@ -594,6 +734,7 @@ function ApiKeys({ catalog, reload }: { catalog: Catalog; reload: () => void }) 
           </li>
         ))}
       </ul>
+      {used.includes('copilot') && <CopilotRow reload={reload} />}
       {opened && (
         <p className="saved">
           Klistra in nyckeln i terminalfönstret och tryck Enter.{' '}

@@ -14,6 +14,8 @@ import {
   loadConsultants,
   pickPortrait,
   providerStatus,
+  copilotStatus,
+  saveCopilotLimits,
   PROVIDERS,
   removeConsultant,
   saveConsultant,
@@ -474,6 +476,17 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
     } catch (err) {
       throw new HttpError(409, (err as Error).message);
     }
+  }
+  if (path === '/api/consultants/copilot' && (req.method === 'GET' || req.method === 'PUT')) {
+    if (req.method === 'PUT') {
+      const body = (await readJson(req)) as { card?: unknown; day?: unknown };
+      try {
+        saveCopilotLimits(body);
+      } catch (err) {
+        throw new HttpError(400, (err as Error).message);
+      }
+    }
+    return json(res, 200, await copilotStatus());
   }
   const face = /^\/api\/faces\/([\w-]+)$/.exec(path);
   if (req.method === 'GET' && face) {

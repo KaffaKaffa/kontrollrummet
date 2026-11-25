@@ -3610,6 +3610,33 @@ button.tip:hover {
   border-radius: 50%;
 }
 
+.copilot-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-top: var(--space-12);
+}
+
+.copilot-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+}
+
+.copilot-head .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.copilot-limits {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+}
+
 .dot-ok {
   background: var(--color-state-success, #3fb37f);
 }

@@ -477,12 +477,44 @@ async function askOpenAi(c: Consultant, question: string, onProgress?: (p: Progr
 }
 
 /** xAI and Perplexity speak OpenAI's chat completions. */
-/** Copilot limits in AI credits (1 credit = 0.01 USD), per card and per day; override with COPILOT_CARD_LIMIT / COPILOT_DAY_LIMIT. */
-const limit = (env: string, fallback: number) => {
-  const n = Number(process.env[env]);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
+/** Copilot limits in AI credits (1 credit = 0.01 USD), per card and per day. Saved in the data dir; else COPILOT_CARD_LIMIT / COPILOT_DAY_LIMIT; else the defaults. */
+const LIMITS_FILE = join(DATA_DIR, 'copilot-limits.json');
+const positive = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined);
+const savedLimits = (): { card?: number; day?: number } => {
+  try {
+    const o = JSON.parse(readFileSync(LIMITS_FILE, 'utf8')) as Record<string, unknown>;
+    return { card: positive(o.card), day: positive(o.day) };
+  } catch {
+    return {};
+  }
 };
-export const copilotLimits = () => ({ card: limit('COPILOT_CARD_LIMIT', 50), day: limit('COPILOT_DAY_LIMIT', 200) });
+export const copilotLimits = () => {
+  const s = savedLimits();
+  return { card: s.card ?? positive(Number(process.env.COPILOT_CARD_LIMIT)) ?? 50, day: s.day ?? positive(Number(process.env.COPILOT_DAY_LIMIT)) ?? 200 };
+};
+export function saveCopilotLimits(next: { card?: unknown; day?: unknown }) {
+  const cur = copilotLimits();
+  const card = next.card === undefined ? cur.card : positive(next.card);
+  const day = next.day === undefined ? cur.day : positive(next.day);
+  if (card === undefined || day === undefined) throw new Error('gränserna måste vara tal över 0');
+  mkdirSync(DATA_DIR, { recursive: true });
+  writeFileSync(LIMITS_FILE, JSON.stringify({ card, day }));
+  return { card, day };
+}
+
+/** For the settings row: is there a token, the plan, what is left of the month, the limits and what is spent today. */
+export async function copilotStatus() {
+  const token = keyOf('copilot');
+  const base = { hasKey: Boolean(token), limits: copilotLimits(), usedToday: copilotCreditsToday() };
+  if (!token) return { ...base, models: [] as copilot.CopilotModel[] };
+  const [q, models] = await Promise.allSettled([copilot.quota(token), copilot.models(token)]);
+  return {
+    ...base,
+    quota: q.status === 'fulfilled' ? q.value : undefined,
+    models: models.status === 'fulfilled' ? models.value : [],
+    error: q.status === 'rejected' ? (q.reason as Error).message : models.status === 'rejected' ? (models.reason as Error).message : undefined,
+  };
+}
 
 /** Things that look like keys or tokens; a question is never sent with one. */
 const SECRET_PATTERNS: [string, RegExp][] = [
@@ -518,7 +550,7 @@ async function copilotPrecheck(c: Consultant, teamId: string, subtaskId: number 
     }
   }
   if (!reason) return;
-  addNotice(teamId, subtaskId ?? null, `${consultantWho(c)} (Copilot) nekades: ${reason}. Höj gränsen med COPILOT_CARD_LIMIT / COPILOT_DAY_LIMIT eller vänta.`);
+  addNotice(teamId, subtaskId ?? null, `${consultantWho(c)} (Copilot) nekades: ${reason}. Höj gränsen under API-nycklar eller vänta.`);
   throw new Error(`${consultantWho(c)} kan inte frågas nu: ${reason}. Fortsätt utan konsulten eller be ägaren höja gränsen.`);
 }
 

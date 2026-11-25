@@ -646,6 +646,11 @@ export function CardDetail({
         )}
         {subtask.branch && <code className="filename">{subtask.branch}</code>}
         {subtask.costUsd > 0 && <span className="num">{usd(subtask.costUsd)}</span>}
+        {(subtask.consultCredits ?? 0) > 0 && (
+          <span className="num" title="AI-credits konsulterna på Copilot har kostat på det här kortet (1 credit = 0,01 USD).">
+            {Math.round(subtask.consultCredits! * 10) / 10} credits
+          </span>
+        )}
         {subtask.contextTokens > 0 && (
           <span className="num" title="Hur mycket agenten läser om vid varje steg. Över gränsen sammanfattas samtalet, och en väckning börjar i en ny session.">
             {Math.round(subtask.contextTokens / 1000)}k sammanhang

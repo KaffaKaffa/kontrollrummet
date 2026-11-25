@@ -172,6 +172,8 @@ export interface Subtask {
   review: { state: 'waiting' | 'changes' | 'approved' | 'none'; who: string[] } | null;
   costUsd: number;
   contextTokens: number;
+  /** AI credits spent on Copilot consultants for this card. */
+  consultCredits?: number;
   createdAt: string;
   updatedAt: string;
 }
