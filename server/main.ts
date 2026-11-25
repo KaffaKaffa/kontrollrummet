@@ -146,6 +146,10 @@ class HttpError extends Error {
   }
 }
 
+/** Neutral silhouette served when a template has no drawn face yet. */
+const FALLBACK_FACE =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#3a3f4b"/><circle cx="50" cy="38" r="18" fill="#8b93a5"/><path d="M14 100c2-26 18-38 36-38s34 12 36 38z" fill="#8b93a5"/></svg>';
+
 function json(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(body));
@@ -507,7 +511,11 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
   if (req.method === 'GET' && face) {
     // The library's faces (agents, the wardrobe, the consultant templates), to pick from.
     const file = join(APP_ROOT, 'library', 'avatars', `${face[1]}.png`);
-    if (!existsSync(file)) throw new HttpError(404, 'inget ansikte');
+    if (!existsSync(file)) {
+      // A template without a drawn face (yet) gets a neutral silhouette instead of a 404.
+      res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-cache' });
+      return res.end(FALLBACK_FACE);
+    }
     res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-cache' });
     return res.end(readFileSync(file));
   }
