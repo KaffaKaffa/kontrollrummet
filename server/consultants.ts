@@ -26,7 +26,7 @@ import { addNotice, copilotCreditsToday, getSubtask, recordCopilotUsage } from '
  * model's strengths. Some are asked over their API by the control room; the
  * rest through an MCP server the asking agent is given.
  */
-export type ApiProvider = 'openai' | 'gemini' | 'grok' | 'perplexity' | 'copilot';
+export type ApiProvider = 'openai' | 'gemini' | 'grok' | 'perplexity' | 'copilot' | 'foundry' | 'openai-compatible';
 export type Provider = ApiProvider | 'runway' | 'elevenlabs' | 'suno' | 'meshy' | 'kling' | 'tripo' | 'rodin' | 'flux' | 'deepl' | 'stability';
 
 export interface Service {
@@ -45,6 +45,8 @@ export const SERVICES: Service[] = [
   { id: 'grok', label: 'xAI Grok', via: 'api', note: 'Grok och Grok Imagine', kinds: ['text', 'image'] },
   { id: 'perplexity', label: 'Perplexity', via: 'api', note: 'Sonar: svar med webbkällor', kinds: ['text'] },
   { id: 'copilot', label: 'GitHub Copilot', via: 'api', note: 'Modeller från flera leverantörer via din licens', kinds: ['text'] },
+  { id: 'foundry', label: 'Microsoft Foundry', via: 'api', note: 'Modeller du själv har satt upp (Mistral, Llama, DeepSeek m.fl.); deployment-namnet anges per konsult', kinds: ['text'] },
+  { id: 'openai-compatible', label: 'OpenAI-kompatibel endpoint', via: 'api', note: 'Valfri endpoint med OpenAI:s chat completions (t.ex. en egen server)', kinds: ['text'] },
   { id: 'runway', label: 'Runway', via: 'mcp', note: 'Video och bilder', kinds: ['image', 'text'] },
   { id: 'elevenlabs', label: 'ElevenLabs', via: 'mcp', note: 'Röst, musik och ljudeffekter', kinds: ['text', 'image'] },
   { id: 'suno', label: 'Suno', via: 'mcp', note: 'Musik med sång', kinds: ['text', 'image'] },
@@ -105,7 +107,7 @@ const parseTips = (raw: string | undefined): Tip[] =>
 const LIBRARY = join(import.meta.dirname, '..', 'library', 'consultants');
 const PORTRAITS = join(import.meta.dirname, '..', 'web', 'public', 'avatars');
 export const PROVIDERS: Provider[] = SERVICES.map((s) => s.id);
-export const API_PROVIDERS: ApiProvider[] = ['openai', 'gemini', 'grok', 'perplexity', 'copilot'];
+export const API_PROVIDERS: ApiProvider[] = ['openai', 'gemini', 'grok', 'perplexity', 'copilot', 'foundry', 'openai-compatible'];
 export const PROVIDER_LABEL = Object.fromEntries(SERVICES.map((s) => [s.id, s.label])) as Record<Provider, string>;
 /** Where a key is made, opened in the browser when the owner adds one. */
 export const KEY_PAGE: Record<ApiProvider, string> = {
@@ -115,6 +117,8 @@ export const KEY_PAGE: Record<ApiProvider, string> = {
   perplexity: 'https://www.perplexity.ai/account/api/keys',
   // Fine-grained token with the "Copilot Requests" permission (classic ghp_ tokens do not work).
   copilot: 'https://github.com/settings/personal-access-tokens/new',
+  foundry: 'https://ai.azure.com',
+  'openai-compatible': '',
 };
 /** Where each provider's key lives: an environment variable, else the keychain (macOS) or DPAPI (Windows). */
 export const KEY_SERVICE: Record<ApiProvider, { env: string; service: string }> = {
@@ -123,6 +127,8 @@ export const KEY_SERVICE: Record<ApiProvider, { env: string; service: string }> 
   grok: { env: 'XAI_API_KEY', service: 'control-room-grok' },
   perplexity: { env: 'PERPLEXITY_API_KEY', service: 'control-room-perplexity' },
   copilot: { env: 'COPILOT_GITHUB_TOKEN', service: 'control-room-copilot' },
+  foundry: { env: 'FOUNDRY_API_KEY', service: 'kontrollrummet-foundry' },
+  'openai-compatible': { env: 'OPENAI_COMPATIBLE_API_KEY', service: 'control-room-openai-compatible' },
 };
 
 function keyOf(provider: ApiProvider): string | null {
@@ -348,7 +354,7 @@ const newest = (ids: string[]) => [...ids].sort((a, b) => version(b) - version(a
 
 /** The provider's models, from its own API, so the list is never out of date. */
 export async function listModels(provider: Provider): Promise<string[]> {
-  if (!isApi(provider)) return [];
+  if (!isApi(provider) || isCompat(provider)) return []; // deployments are named per consultant
   const key = keyOf(provider);
   if (!key) throw new Error(`ingen nyckel för ${PROVIDER_LABEL[provider]}`);
   // Perplexity has no model list to ask; its Sonar models.
@@ -568,10 +574,10 @@ async function askCopilot(c: Consultant, question: string, token: string, onProg
   }
 }
 
-async function askChat(c: Consultant, question: string, url: string, key: string, label: string, onProgress?: (p: Progress) => void): Promise<string> {
+async function askChat(c: Consultant, question: string, url: string, key: string, label: string, onProgress?: (p: Progress) => void, auth: Record<string, string> = { authorization: `Bearer ${key}` }): Promise<string> {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+    headers: { ...auth, 'content-type': 'application/json' },
     body: JSON.stringify({ model: c.model, messages: [{ role: 'system', content: c.instructions }, { role: 'user', content: question }] }),
   });
   const data = (await res.json()) as {
@@ -591,6 +597,78 @@ async function askChat(c: Consultant, question: string, url: string, key: string
   for (const r of data.search_results ?? []) onProgress?.({ source: { url: r.url, title: r.title } });
   if (!data.search_results?.length) for (const url of data.citations ?? []) onProgress?.({ source: { url } });
   return data.citations?.length ? `${text}\n\nKällor:\n${data.citations.map((u) => `- ${u}`).join('\n')}` : text;
+}
+
+/**
+ * OpenAI-compatible text endpoints (Microsoft Foundry and anything alike). The endpoint is a local
+ * setting (env FOUNDRY_ENDPOINT / OPENAI_COMPATIBLE_ENDPOINT, else compat.json in the data dir) and
+ * the key lives in the keychain: neither is ever in the code or the repo. The consultant's `model`
+ * is the deployment name.
+ */
+type CompatProvider = 'foundry' | 'openai-compatible';
+const isCompat = (p: Provider): p is CompatProvider => p === 'foundry' || p === 'openai-compatible';
+const COMPAT_FILE = join(DATA_DIR, 'compat.json');
+const COMPAT_ENV: Record<CompatProvider, string> = { foundry: 'FOUNDRY_ENDPOINT', 'openai-compatible': 'OPENAI_COMPATIBLE_ENDPOINT' };
+const FOUNDRY_API_VERSION = '2024-10-21';
+const readCompat = (): { endpoints?: Record<string, unknown>; day?: unknown } => {
+  try {
+    return JSON.parse(readFileSync(COMPAT_FILE, 'utf8'));
+  } catch {
+    return {};
+  }
+};
+/** The endpoint set on this machine, with a trailing slash; '' when none. */
+export function compatEndpoint(p: CompatProvider): string {
+  const raw = process.env[COMPAT_ENV[p]] || readCompat().endpoints?.[p];
+  const url = typeof raw === 'string' ? raw.trim() : '';
+  return url ? url.replace(/\/*$/, '/') : '';
+}
+/** Requests per day across the compat providers. COMPAT_DAY_LIMIT, else compat.json, else 100. */
+export const compatDayLimit = () => positive(readCompat().day) ?? positive(Number(process.env.COMPAT_DAY_LIMIT)) ?? 100;
+/** Saves endpoints (an empty string clears one) and/or the day limit; only http(s) URLs are accepted. */
+export function saveCompatSettings(next: { endpoints?: Partial<Record<CompatProvider, string>>; day?: unknown }) {
+  const cur = readCompat();
+  const endpoints: Record<string, unknown> = { ...cur.endpoints };
+  for (const p of ['foundry', 'openai-compatible'] as const) {
+    const v = next.endpoints?.[p];
+    if (v === undefined) continue;
+    const url = v.trim();
+    if (url && !/^https?:\/\/[^\s]+$/.test(url)) throw new Error('endpointen måste vara en http(s)-adress');
+    if (url) endpoints[p] = url;
+    else delete endpoints[p];
+  }
+  const day = next.day === undefined ? positive(cur.day) : positive(next.day);
+  if (next.day !== undefined && day === undefined) throw new Error('dagsgränsen måste vara ett tal över 0');
+  mkdirSync(DATA_DIR, { recursive: true });
+  writeFileSync(COMPAT_FILE, JSON.stringify({ endpoints, ...(day === undefined ? {} : { day }) }));
+}
+/** For the settings row: which endpoints are set (never their addresses), the limit and what is used today. */
+export function compatStatus() {
+  return {
+    limit: compatDayLimit(),
+    usedToday: compatUsedToday(),
+    providers: (['foundry', 'openai-compatible'] as const).map((p) => ({ provider: p, hasKey: Boolean(keyOf(p)), hasEndpoint: Boolean(compatEndpoint(p)) })),
+  };
+}
+/** Requests today, counted from the consultation log. */
+function compatUsedToday(): number {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    return readFileSync(LOG, 'utf8').split('\n').filter((l) => l.startsWith(today) && /\t(foundry|openai-compatible)\//.test(l)).length;
+  } catch {
+    return 0;
+  }
+}
+async function askCompat(c: Consultant, p: CompatProvider, question: string, key: string, onProgress?: (p: Progress) => void): Promise<string> {
+  const endpoint = compatEndpoint(p);
+  if (!endpoint) throw new Error(`ingen endpoint för ${PROVIDER_LABEL[p]} (Inställningar → Konsulter)`);
+  const used = compatUsedToday();
+  if (used >= compatDayLimit()) throw new Error(`dagens gräns på ${compatDayLimit()} frågor till ${PROVIDER_LABEL[p]} är nådd (${used} använda). Höj gränsen eller vänta till i morgon.`);
+  if (p === 'foundry') {
+    const url = `${endpoint}openai/deployments/${encodeURIComponent(c.model)}/chat/completions?api-version=${FOUNDRY_API_VERSION}`;
+    return askChat(c, question, url, key, PROVIDER_LABEL[p], onProgress, { 'api-key': key });
+  }
+  return askChat(c, question, `${endpoint}chat/completions`, key, PROVIDER_LABEL[p], onProgress);
 }
 
 async function grokImage(c: Consultant, question: string): Promise<Buffer> {
@@ -725,6 +803,8 @@ export async function consult(
             meta = got.meta;
             return got.text;
           })()
+        : isCompat(c.provider)
+        ? await askCompat(c, c.provider, question, key(c.provider), opts.onProgress)
         : c.provider === 'gemini'
         ? (await askGemini(c, question, opts.onProgress)).text
         : c.provider === 'grok'
