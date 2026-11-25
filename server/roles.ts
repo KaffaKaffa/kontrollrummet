@@ -2,6 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameS
 import { execFileSync } from './proc.ts';
 import { basename, isAbsolute, join } from 'node:path';
 import { APP_ROOT, TEAMS_DIR, expandHome } from './config.ts';
+import { cleanCap } from './limits.ts';
 import { getAccount } from './accounts.ts';
 import type { ReleaseConfig } from './releases.ts';
 import type { VmConfig } from './vms.ts';
@@ -286,6 +287,8 @@ export interface Team {
   reviewer: string[];
   /** Skills and commands in the repos that this project's agents must not use. */
   disabledSkills: string[];
+  /** Most agents of this project working at once; null: no limit. */
+  maxAgents: number | null;
   /** MCP servers defined for the team in team.json, by id. */
   mcpServers: Record<string, Record<string, unknown>>;
   /** Environment variables for MCP servers, read from these keychain services at launch. */
@@ -388,6 +391,7 @@ function loadTeam(id: string): Team {
     azurePortalConfigDir?: string;
     reviewer?: string | string[];
     disabledSkills?: string[];
+    maxAgents?: number;
     mcp?: Record<string, Record<string, unknown>>;
     secrets?: Record<string, string>;
     baseBranch?: string;
@@ -440,6 +444,7 @@ function loadTeam(id: string): Team {
     azurePortalConfigDir: config.azurePortalConfigDir ? expandHome(config.azurePortalConfigDir) : null,
     reviewer: [config.reviewer ?? []].flat(),
     disabledSkills: config.disabledSkills ?? [],
+    maxAgents: cleanCap(config.maxAgents),
     mcpServers: config.mcp ?? {},
     secrets: config.secrets ?? {},
     baseBranch: config.baseBranch ?? 'main',

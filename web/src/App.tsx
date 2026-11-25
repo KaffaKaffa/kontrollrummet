@@ -10,6 +10,7 @@ import { AgentSettings, Modal } from './settings.tsx';
 import { Godfather } from './godfather.tsx';
 import { Logo, NewProjectGuide, ProjectSettings } from './project.tsx';
 import { Releases } from './releases.tsx';
+import { AppSettings } from './limits.tsx';
 import type { Director, Duty } from './office3d/director.ts';
 import { doing, useLifeTick, useOfficeLife } from './office3d/life.ts';
 import { ThemeToggle } from './theme.tsx';
@@ -31,6 +32,8 @@ function useRoute() {
     return () => window.removeEventListener('hashchange', on);
   }, []);
   if (route[0] === 'new') return { team: null, view: 'new', planId: null, cardId: null, agentId: null, consultantId: null, conversationId: null } as const;
+  // #/installningar: the app's own settings, outside the projects.
+  if (route[0] === 'installningar') return { team: null, view: 'app', planId: null, cardId: null, agentId: null, consultantId: null, conversationId: null } as const;
   // #/gudfadern and #/gudfadern/<conversation> belong to no team.
   if (route[0] === 'gudfadern')
     return { team: null, view: 'gudfadern', planId: null, cardId: null, agentId: null, consultantId: null, conversationId: route[1] ? Number(route[1]) : null } as const;
@@ -1120,13 +1123,16 @@ export function App() {
   useSystemNotifications(board);
   // Limits, quota and usage belong to the shown team's Claude account, or the open conversation's.
   const conversation = view === 'gudfadern' ? board.conversations.find((c) => c.id === route.conversationId) : undefined;
-  const accountId = view === 'gudfadern' ? (conversation?.account ?? board.accounts.find((a) => a.isDefault)?.id) : team?.account;
+  const accountId = view === 'gudfadern' || view === 'app' ? (conversation?.account ?? board.accounts.find((a) => a.isDefault)?.id) : team?.account;
   const account = board.accounts.find((a) => a.id === accountId);
   const paused = account ? board.pausedUntil[account.id] : undefined;
   const sameAccount = new Set(board.teams.filter((t) => t.account === accountId).map((t) => t.id));
   const running =
     board.subtasks.filter((s) => s.status === 'running' && sameAccount.has(s.team)).length +
     board.conversations.filter((c) => c.status === 'running' && c.account === accountId).length;
+  const accountCap = account?.maxAgents ?? null;
+  const teamCap = view === 'gudfadern' ? null : (team?.maxAgents ?? null);
+  const teamRunning = board.subtasks.filter((s) => s.status === 'running' && s.team === team?.id).length;
   useEffect(() => {
     document.title = total > 0 ? `(${total}) Kontrollrummet` : 'Kontrollrummet';
     // Inside Kontrollrummet.app the number goes on the Dock icon.
@@ -1144,7 +1150,7 @@ export function App() {
         </h1>
         <nav aria-label="Team" className="tabs">
           {board.teams.map((t) => (
-            <a key={t.id} href={`#/${t.id}/${view === 'gudfadern' || view === 'new' ? 'office' : view}`} aria-current={view !== 'gudfadern' && view !== 'new' && t.id === team?.id ? 'page' : undefined}>
+            <a key={t.id} href={`#/${t.id}/${view === 'gudfadern' || view === 'new' || view === 'app' ? 'office' : view}`} aria-current={view !== 'gudfadern' && view !== 'new' && view !== 'app' && t.id === team?.id ? 'page' : undefined}>
               <Logo team={t} />
               {t.name}
               {attention(t.id) > 0 && <span className="count num">{attention(t.id)}</span>}
@@ -1154,7 +1160,7 @@ export function App() {
             +
           </a>
         </nav>
-        {team && view !== 'gudfadern' && view !== 'new' && (
+        {team && view !== 'gudfadern' && view !== 'new' && view !== 'app' && (
           <nav aria-label="Vyer" className="tabs">
             <a href={`#/${team.id}/office`} aria-current={view === 'office' ? 'page' : undefined}>
               Kontoret
@@ -1175,11 +1181,16 @@ export function App() {
             </a>
           </nav>
         )}
-        {team && view !== 'gudfadern' && view !== 'new' && <DevAppButtons board={board} team={team} watchDevLog={watchDevLog} />}
+        {team && view !== 'gudfadern' && view !== 'new' && view !== 'app' && <DevAppButtons board={board} team={team} watchDevLog={watchDevLog} />}
         <nav aria-label="Gudfadern" className="tabs">
           <a href="#/gudfadern" aria-current={view === 'gudfadern' ? 'page' : undefined}>
             Gudfadern
             {board.approvals.some((a) => a.conversationId) && <span className="count num">{board.approvals.filter((a) => a.conversationId).length}</span>}
+          </a>
+        </nav>
+        <nav aria-label="Appen" className="tabs">
+          <a href="#/installningar" aria-current={view === 'app' ? 'page' : undefined}>
+            Appen
           </a>
         </nav>
         <UsageMeter usage={account ? (board.usage[account.id] ?? null) : null} account={board.accounts.length > 1 ? account : undefined} />
@@ -1196,9 +1207,18 @@ export function App() {
             <>
               <span className="pulse" aria-hidden="true" />
               <span className="num">
-                {running}/{board.limits.maxAgents}
+                {running}/{accountCap === null ? '∞' : accountCap}
               </span>{' '}
               vid tangentbordet
+              {teamCap !== null && view !== 'gudfadern' && (
+                <>
+                  {' · '}
+                  <span className="num">
+                    {teamRunning}/{teamCap}
+                  </span>{' '}
+                  i projektet
+                </>
+              )}
             </>
           ) : (
             <span className="offline">Ingen kontakt med servern</span>
@@ -1224,6 +1244,8 @@ export function App() {
         <ViewBoundary key={`${view}-${team?.id ?? ''}`}>
         {view === 'new' ? (
           <NewProjectGuide board={board} />
+        ) : view === 'app' ? (
+          <AppSettings board={board} />
         ) : view === 'gudfadern' ? (
           <Godfather board={board} openId={route.conversationId} loadConvEvents={loadConvEvents} />
         ) : !teamBoard ? (

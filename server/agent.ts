@@ -3,7 +3,8 @@ import { spawn, type ChildProcessWithoutNullStreams } from './proc.ts';
 import { createInterface } from 'node:readline';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { CLAUDE_BIN, MAX_CONCURRENT, PORT } from './config.ts';
+import { CLAUDE_BIN, PORT } from './config.ts';
+import { accountCap, hasRoomUnder } from './limits.ts';
 import { pauseLeft, pauseUntil, readRateLimitEvent } from './usage.ts';
 import { CONTROL_ROOM_TOOL_MS, claudeEnv, contextOf, describeTool, toolResultText, userLine } from './claude-run.ts';
 import { issueToken, releaseLocks, reportDenial, revokeToken, takeReport, toolGuide } from './mcp.ts';
@@ -103,6 +104,21 @@ export function runningCount(account?: string): number {
   for (const r of runs.values()) if (!account || r.account === account) n++;
   for (const a of starting.values()) if (!account || a === account) n++;
   return n;
+}
+
+/** Agents holding a slot for one project (cards only; Gudfadern belongs to no project). */
+export function runningInTeam(teamId: string): number {
+  let n = 0;
+  for (const id of [...runs.keys(), ...starting.keys()]) if (getSubtask(id)?.team === teamId) n++;
+  return n;
+}
+
+/** Whether a card may start: both its account and its project have room. */
+export function hasRoom(subtaskId: number): boolean {
+  const s = getSubtask(subtaskId);
+  const team = s ? getTeam(s.team) : undefined;
+  const account = team?.account ?? '';
+  return hasRoomUnder(runningCount(account), accountCap(account)) && (!team || hasRoomUnder(runningInTeam(team.id), team.maxAgents));
 }
 
 let extraRunning: (account?: string) => number = () => 0;
@@ -420,7 +436,7 @@ export async function startAgent(
   // While out of quota, or with every slot taken, wake-ups wait in the queue
   // with their message; only the owner's own messages go straight through.
   const account = accountOfCard(subtaskId);
-  const full = runningCount(account) >= MAX_CONCURRENT;
+  const full = !hasRoom(subtaskId);
   if (wake && (pauseLeft(account) > 0 || full)) {
     if (message) {
       const waiting = getMark(WAKES, String(subtaskId));

@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from '
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { DATA_DIR, expandHome } from './config.ts';
+import { accountCap } from './limits.ts';
 
 /**
  * A Claude account is a Claude Code profile: a config folder with its own
@@ -140,7 +141,7 @@ export function accountEnv(id: string | null | undefined, base: NodeJS.ProcessEn
 /** For the board: every account and whether it is logged in. */
 export function accountsView() {
   const file = load();
-  return file.accounts.map((a) => ({ id: a.id, name: a.name, isDefault: a.id === file.default, ...accountStatus(a) }));
+  return file.accounts.map((a) => ({ id: a.id, name: a.name, isDefault: a.id === file.default, maxAgents: accountCap(a.id), ...accountStatus(a) }));
 }
 
 /**

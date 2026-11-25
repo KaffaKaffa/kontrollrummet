@@ -1,0 +1,87 @@
+import { useEffect, useState } from 'react';
+import { put, type Account, type Board, type Team } from './api.ts';
+import { Section, useAction } from './project.tsx';
+
+const WARNING = 'Utan tak kan prenumerationens egna gränser nås, och då pausar agenterna tills kvoten har återställts.';
+
+/** A cap as a number or "Ingen gräns". Saves when changed. */
+function CapField({ value, onSave, busy }: { value: number | null; onSave: (cap: number | null) => void; busy: boolean }) {
+  const [text, setText] = useState(value === null ? '' : String(value));
+  useEffect(() => setText(value === null ? '' : String(value)), [value]);
+  const commit = () => {
+    const n = Math.floor(Number(text));
+    if (Number.isFinite(n) && n >= 1 && n !== value) onSave(Math.min(n, 99));
+    else setText(value === null ? '' : String(value));
+  };
+  return (
+    <div className="field-inline">
+      <label className="field-inline">
+        <input
+          type="checkbox"
+          checked={value === null}
+          disabled={busy}
+          onChange={(e) => onSave(e.target.checked ? null : Math.max(1, Math.floor(Number(text)) || 2))}
+        />
+        <span>Ingen gräns</span>
+      </label>
+      <input
+        className="num"
+        type="number"
+        min={1}
+        max={99}
+        style={{ width: '5rem' }}
+        aria-label="Högst så många agenter samtidigt"
+        value={text}
+        disabled={busy || value === null}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && commit()}
+      />
+    </div>
+  );
+}
+
+function AccountCap({ account, teams }: { account: Account; teams: Team[] }) {
+  const save = useAction();
+  const open = teams.filter((t) => t.account === account.id && t.maxAgents === null);
+  return (
+    <li className="settings-row">
+      <strong>{account.name}</strong>
+      {account.email && <small> {account.email}</small>}
+      <CapField value={account.maxAgents} busy={save.busy} onSave={(cap) => void save.run(() => put(`/api/accounts/${account.id}/limit`, { maxAgents: cap }))} />
+      {account.maxAgents === null && open.length > 0 && <small className="settings-muted">{WARNING}</small>}
+      {save.error && <span className="composer-error">{save.error}</span>}
+    </li>
+  );
+}
+
+/** The app's own settings, outside the projects: how many agents may work at once per Claude account. */
+export function AppSettings({ board }: { board: Board }) {
+  return (
+    <div className="settings">
+      <Section
+        title="Claude-konton"
+        note="Högst så många agenter arbetar samtidigt på kontot, för alla projekt som använder det. Gudfaderns samtal räknas med. Ändringen gäller direkt, och kön sätter igång när taket höjs. Ett projekt kan ha ett eget tak under sina inställningar, och båda gäller."
+      >
+        <ul className="settings-list">
+          {board.accounts.map((a) => (
+            <AccountCap key={a.id} account={a} teams={board.teams} />
+          ))}
+        </ul>
+      </Section>
+    </div>
+  );
+}
+
+/** The project's own cap, under its settings. */
+export function TeamCap({ board, team }: { board: Board; team: Team }) {
+  const save = useAction();
+  const account = board.accounts.find((a) => a.id === team.account);
+  return (
+    <Section title="Agenttak" note="Högst så många av projektets agenter arbetar samtidigt. Ett kort startar bara när både projektet och Claude-kontot har plats. Standard är ingen gräns.">
+      <CapField value={team.maxAgents} busy={save.busy} onSave={(cap) => void save.run(() => put(`/api/teams/${team.id}/settings`, { maxAgents: cap }))} />
+      {team.maxAgents === null && account?.maxAgents === null && <p className="settings-muted">{WARNING}</p>}
+      {save.error && <span className="composer-error">{save.error}</span>}
+    </Section>
+  );
+}

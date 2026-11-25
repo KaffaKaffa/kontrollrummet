@@ -30,7 +30,7 @@ import { localImages, reveal, serveLocalImage } from './local-files.ts';
 import { listConsultations } from './consultations.ts';
 import { basename, dirname, extname, join, normalize, resolve } from 'node:path';
 import { WebSocketServer } from 'ws';
-import { APP_ROOT, CLAUDE_BIN, DEV, HOST, MAX_CONCURRENT, PORT, TEAMS_DIR, WEB_DIST, expandHome } from './config.ts';
+import { APP_ROOT, CLAUDE_BIN, DEV, HOST, PORT, TEAMS_DIR, WEB_DIST, expandHome } from './config.ts';
 import { OWNER } from './owner.ts';
 import { bus } from './bus.ts';
 import {
@@ -127,7 +127,8 @@ import { deployProd, deployTest, listJobs, prodPreview, releaseApproved } from '
 import { checkPrNow, closerLookNow, ownerWroteTo, ownPrs } from './watch.ts';
 import { figmaTitle } from './figma.ts';
 import { runningCount, startAgent, stopAgent, stopAll } from './agent.ts';
-import { startScheduler } from './orchestrator.ts';
+import { startScheduler, tick } from './orchestrator.ts';
+import { cleanCap, setAccountCap } from './limits.ts';
 import { cleanDevApps, getTeam, loadTeams, rawNotes, saveNotes, saveRole, saveTeamPrompt } from './roles.ts';
 
 /**
@@ -185,6 +186,7 @@ function state() {
       monitorEveryMinutes: t.monitors?.everyMinutes ?? 30,
       azure: t.repos.some((r) => hostOfRepo(r.path) === 'azure'),
       disabledSkills: t.disabledSkills,
+      maxAgents: t.maxAgents,
       hasLogo: Boolean(logoPath(t.id)),
       mcpServers: availableServers(t).map(({ id, label, note, source, auth, suggestWhen }) => ({ id, label, note, source: sourceLabel(source), auth, suggestWhen })),
       teamPrompt: t.teamPrompt,
@@ -194,7 +196,7 @@ function state() {
     })),
     tasks: listTasks(),
     subtasks: listSubtasks(),
-    limits: { maxAgents: MAX_CONCURRENT, running: runningCount() },
+    limits: { running: runningCount() },
     accounts: accountsView(),
     approvals: listApprovals(),
     consultations: listConsultations(),
@@ -307,6 +309,19 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
     }
   }
   const login = /^\/api\/accounts\/([\w.-]+)\/login$/.exec(path);
+  // The cap on agents working at once for this account: { maxAgents: number | null }, null for no limit.
+  // It holds at once; the queue starts what now has room.
+  const cap = /^\/api\/accounts\/([\w.-]+)\/limit$/.exec(path);
+  if (req.method === 'PUT' && cap) {
+    const body = await readJson(req);
+    const account = getAccount(cap[1]);
+    if (account.id !== cap[1]) throw new HttpError(404, 'kontot finns inte');
+    if (body.maxAgents !== null && cleanCap(body.maxAgents) === null) throw new HttpError(400, 'taket ska vara ett heltal från 1, eller ingen gräns');
+    setAccountCap(account.id, cleanCap(body.maxAgents));
+    bus.emit({ type: 'teams' });
+    tick();
+    return json(res, 200, {});
+  }
   if (req.method === 'POST' && login) {
     await readJson(req);
     const account = getAccount(login[1]);
@@ -608,6 +623,8 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
           ...(body.infraItems !== undefined ? { infraItems: cleanItems(body.infraItems) } : {}),
           ...(body.devApps !== undefined ? { devApps: cleanDevApps(body.devApps) } : {}),
         });
+        // A raised cap lets the queue start what now has room.
+        if (body.maxAgents !== undefined) tick();
         return json(res, 200, {});
       }
       if (req.method === 'POST') {

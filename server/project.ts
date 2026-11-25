@@ -2,6 +2,7 @@ import { execFileSync } from './proc.ts';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { extname, isAbsolute, join } from 'node:path';
 import { APP_ROOT, TEAMS_DIR } from './config.ts';
+import { cleanCap } from './limits.ts';
 import { getAccount } from './accounts.ts';
 import { listSubtasks } from './db.ts';
 import { generateImage } from './images.ts';
@@ -274,6 +275,8 @@ export function saveTeamSettings(
     infraItems?: InfraItem[];
     monitorEveryMinutes?: number;
     disabledSkills?: string[];
+    /** Most agents at once for this project; null or 0: no limit. */
+    maxAgents?: number | null;
     people?: unknown;
     /** The local development environments, already checked (roles.ts cleanDevApps). */
     devApps?: DevApp[];
@@ -298,6 +301,11 @@ export function saveTeamSettings(
     const list = [...new Set(input.disabledSkills.filter((x) => typeof x === 'string' && /^[\w.-]+$/.test(x)))];
     if (list.length) shared.disabledSkills = list;
     else delete shared.disabledSkills;
+  }
+  if (input.maxAgents !== undefined) {
+    const cap = cleanCap(input.maxAgents);
+    if (cap !== null) local.maxAgents = cap;
+    else delete local.maxAgents;
   }
   // The people in the project are everyone's: team.json.
   if (input.people !== undefined) {
