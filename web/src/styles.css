@@ -3237,7 +3237,12 @@ main:has(.office-layout) {
    Everything else on the bar keeps its full text. */
 .topbar .tabs[aria-label='Team'] {
   flex: 1 1 auto;
-  min-width: calc(var(--space-160) * 1.5);
+  min-width: var(--space-160);
+}
+
+/* The app chips show the name only until the window has room for the address too. */
+.topbar .devapp-host {
+  display: none;
 }
 
 .topbar .tabs:not([aria-label='Team']),
@@ -3262,7 +3267,11 @@ main:has(.office-layout) {
   display: none;
 }
 
-@media (min-width: 1700px) {
+@media (min-width: 2100px) {
+  .topbar .devapp-host {
+    display: inline;
+  }
+
   .topbar .usage {
     display: flex;
     flex: none;
