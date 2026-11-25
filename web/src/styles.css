@@ -3998,6 +3998,8 @@ button.link-chip {
   background: var(--color-surface-1);
   color: var(--color-fg-secondary);
   white-space: nowrap;
+  /* Never shrink below the text: the pill is a flex item inside .topbar-status. */
+  flex: none;
 }
 
 .status-pill b {
@@ -4057,8 +4059,32 @@ button.link-chip {
 
 .cap-field {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-12);
+  min-width: 0;
+}
+
+/* The two options stay on one line; the stepper wraps below instead. */
+.cap-field .segmented {
+  flex-wrap: nowrap;
+  flex: none;
+}
+
+.cap-field .segmented button {
+  padding: 0 var(--space-12);
+  white-space: nowrap;
+}
+
+.cap-card,
+.cap-card-head > *,
+.cap-row > * {
+  min-width: 0;
+}
+
+.cap-card-head .badge {
+  flex: none;
+  white-space: nowrap;
 }
 
 .cap-field .segmented button:disabled {
@@ -4117,4 +4143,8 @@ button.link-chip {
   background: var(--color-state-warning-tint);
   color: var(--color-state-warning-text);
   font-size: var(--text-footnote-size);
+}
+
+.cap-card-head > div:first-child {
+  overflow-wrap: anywhere;
 }
