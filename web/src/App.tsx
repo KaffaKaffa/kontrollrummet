@@ -1133,6 +1133,9 @@ export function App() {
   const accountCap = account?.maxAgents ?? null;
   const teamCap = view === 'gudfadern' ? null : (team?.maxAgents ?? null);
   const teamRunning = board.subtasks.filter((s) => s.status === 'running' && s.team === team?.id).length;
+  const waiting = board.subtasks.filter((s) => s.status === 'queued');
+  const accountFull = accountCap !== null && running >= accountCap && waiting.some((s) => sameAccount.has(s.team));
+  const teamFull = teamCap !== null && teamRunning >= teamCap && waiting.some((s) => s.team === team?.id);
   useEffect(() => {
     document.title = total > 0 ? `(${total}) Kontrollrummet` : 'Kontrollrummet';
     // Inside Kontrollrummet.app the number goes on the Dock icon.
@@ -1204,22 +1207,33 @@ export function App() {
               Kvoten är slut. Fortsätter {new Date(paused).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}
             </span>
           ) : board.connected ? (
-            <>
+            <span className="status-pill">
               <span className="pulse" aria-hidden="true" />
-              <span className="num">
-                {running}/{accountCap === null ? '∞' : accountCap}
-              </span>{' '}
-              vid tangentbordet
-              {teamCap !== null && view !== 'gudfadern' && (
-                <>
-                  {' · '}
-                  <span className="num">
+              {accountCap !== null && (
+                <span className={accountFull ? 'cap-full' : undefined}>
+                  <b className="num">
+                    {running}/{accountCap}
+                  </b>{' '}
+                  konto
+                </span>
+              )}
+              {accountCap !== null && teamCap !== null && ' · '}
+              {teamCap !== null && (
+                <span className={teamFull ? 'cap-full' : undefined}>
+                  <b className="num">
                     {teamRunning}/{teamCap}
-                  </span>{' '}
-                  i projektet
+                  </b>{' '}
+                  projekt
+                </span>
+              )}
+              {accountCap === null && teamCap === null && (
+                <>
+                  <b className="num">{running}</b>
                 </>
               )}
-            </>
+              {' '}vid tangentbordet
+              {accountCap === null && teamCap === null && <span className="status-warn" title="Abonnemangets gränser kan nås" aria-label="Abonnemangets gränser kan nås">⚠</span>}
+            </span>
           ) : (
             <span className="offline">Ingen kontakt med servern</span>
           )}
