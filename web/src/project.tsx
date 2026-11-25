@@ -2,12 +2,8 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ConsultantsTab } from './consultants.tsx';
 import { DevAppsTab } from './devapps.tsx';
 import { del, nameOf, post, put, type PermissionList, type Board, type InfraItem, type Check, type CheckFor, type Existing, type ExistingSkill, type Library, type Scan, type Suggested, type Team } from './api.ts';
-<<<<<<< HEAD
 import { Avatar, useDraft } from './ui.tsx';
-=======
-import { Avatar } from './ui.tsx';
 import { TeamCap } from './limits.tsx';
->>>>>>> origin/main
 import { FolderField } from './folders.tsx';
 
 /**
