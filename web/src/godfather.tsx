@@ -196,6 +196,7 @@ function NewConversation({ board }: { board: Board }) {
         </label>
       </div>
       <Composer
+        draftKey="godfather:new"
         rows={4}
         placeholder="Skriv till Gudfadern…"
         submitLabel="Starta"
@@ -304,6 +305,7 @@ function ConversationView({ board, conversation, loadConvEvents }: { board: Boar
       <Log events={board.convEvents[c.id] ?? []} team="control-room" role={GODFATHER} />
       {error && <p className="composer-error">{error}</p>}
       <Composer
+        draftKey={`godfather:${c.id}`}
         rows={3}
         placeholder={running ? 'Skriv, så blir det nästa tur…' : 'Skriv till Gudfadern…'}
         submitLabel="Skicka"
