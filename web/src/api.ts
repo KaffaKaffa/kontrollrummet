@@ -16,6 +16,8 @@ export type RoleKind = 'lead' | 'architect' | 'bug' | 'tester' | 'designer' | 'a
 export interface Role {
   id: string;
   kind: RoleKind;
+  /** Designers: sketch in Figma or in HTML with the project's tokens. */
+  medium?: 'figma' | 'html';
   vibe: string;
   /** Appearance, for the portrait and the 3D office. */
   look?: string;

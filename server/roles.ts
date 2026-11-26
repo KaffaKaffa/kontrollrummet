@@ -13,9 +13,14 @@ import type { VmConfig } from './vms.ts';
  */
 export type RoleKind = 'lead' | 'architect' | 'bug' | 'tester' | 'designer' | 'app';
 
+/** How a designer works: sketches in Figma, or standalone HTML pages built with the project's tokens. */
+export type DesignMedium = 'figma' | 'html';
+
 export interface Role {
   id: string;
   kind: RoleKind;
+  /** Designers only (other kinds: figma, unused). Front matter: `medium: figma | html`; missing means figma. */
+  medium: DesignMedium;
   /** Short line in the office view: what this stereotype is like. */
   vibe: string;
   /** What the character looks like (age, hair, build, clothes), for the portrait and the 3D office. */
@@ -332,6 +337,8 @@ export function parseRole(id: string, source: string): Role {
     const i = line.indexOf(':');
     if (i > 0) meta.set(line.slice(0, i).trim(), line.slice(i + 1).trim());
   }
+  const medium: DesignMedium = meta.get('medium') === 'html' ? 'html' : 'figma';
+  const kind = (meta.get('kind') as RoleKind | undefined) ?? 'app';
   const list = (key: string) =>
     (meta.get(key) ?? '')
       .split(',')
@@ -340,7 +347,8 @@ export function parseRole(id: string, source: string): Role {
   return {
     id,
     name: meta.get('name') ?? id,
-    kind: (meta.get('kind') as RoleKind | undefined) ?? 'app',
+    kind,
+    medium,
     vibe: meta.get('vibe') ?? '',
     look: meta.get('look') ?? '',
     character: meta.get('character') ?? '',
@@ -350,13 +358,31 @@ export function parseRole(id: string, source: string): Role {
     wakeModel: meta.get('wakeModel') ?? '',
     context: Number(meta.get('context') ?? 0) || 0,
     effort: meta.get('effort') ?? '',
-    mcp: meta.get('mcp') === 'true' || meta.get('mcp') === 'all' ? 'all' : list('mcp'),
+    // A designer without an explicit `mcp:` gets the server its medium needs.
+    mcp:
+      meta.get('mcp') === 'true' || meta.get('mcp') === 'all'
+        ? 'all'
+        : !meta.has('mcp') && kind === 'designer'
+          ? [medium === 'html' ? 'playwright' : 'figma']
+          : list('mcp'),
     owns: list('owns'),
     repos: list('repo'),
     worktree: meta.get('worktree') !== 'false',
     permission: meta.get('permission') ?? 'auto',
     prompt: match[2].trim(),
   };
+}
+
+/**
+ * A role's prompt for its medium: sections wrapped in `<!-- medium: html -->`
+ * … `<!-- /medium -->` are kept only for that medium; the markers are dropped.
+ */
+export function promptFor(role: Pick<Role, 'prompt' | 'medium' | 'kind'>): string {
+  const medium = role.kind === 'designer' ? role.medium : 'figma';
+  return role.prompt
+    .replace(/<!--\s*medium:\s*(\w+)\s*-->\n?([\s\S]*?)<!--\s*\/medium\s*-->\n?/g, (_, m, body) => (m === medium ? body : ''))
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 const read = (path: string) => (existsSync(path) ? readFileSync(path, 'utf8').trim() : '');
@@ -537,6 +563,11 @@ export function saveRole(teamId: string, roleId: string, input: Partial<Role>): 
   const next: Role = { ...current, ...input, id: current.id };
   next.repos = Array.isArray(next.repos) ? next.repos.filter((r) => team.repos.some((x) => x.id === r)) : current.repos;
   next.mcp = next.mcp === 'all' ? 'all' : Array.isArray(next.mcp) ? next.mcp.filter((m) => typeof m === 'string' && /^[\w.-]+$/.test(m)) : [];
+  next.medium = next.medium === 'html' ? 'html' : 'figma';
+  // The medium decides a designer's server; keep a plain figma/playwright pick in step with it.
+  if (next.kind === 'designer' && Array.isArray(next.mcp) && next.mcp.length === 1 && ['figma', 'playwright'].includes(next.mcp[0])) {
+    next.mcp = [next.medium === 'html' ? 'playwright' : 'figma'];
+  }
   if (!KINDS.includes(next.kind)) throw new Error(`okänd kind ${next.kind}`);
   if (!PERMISSIONS.includes(next.permission)) throw new Error(`okänd permission ${next.permission}`);
   const clean = (v: string) => v.replace(/[\r\n]+/g, ' ').trim();
@@ -551,6 +582,7 @@ export function saveRole(teamId: string, roleId: string, input: Partial<Role>): 
     `name: ${clean(next.name)}`,
     next.nick ? `nick: ${clean(next.nick)}` : '',
     `kind: ${next.kind}`,
+    next.kind === 'designer' && next.medium === 'html' ? 'medium: html' : '',
     next.vibe ? `vibe: ${clean(next.vibe)}` : '',
     next.look ? `look: ${clean(next.look)}` : '',
     next.character ? `character: ${clean(next.character)}` : '',
