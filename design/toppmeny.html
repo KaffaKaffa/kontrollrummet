@@ -23,7 +23,7 @@ h2{margin:0 0 6px;font:600 12px system-ui;color:#fff}
 .mi{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px}
 .mi.sel{background:var(--color-brand-tint)}.mi span.n{flex:1}.mi .cnt{margin-left:auto}
 .mi.new{border-top:1px solid var(--color-line-hairline);border-radius:0 0 8px 8px;margin-top:4px;padding-top:12px;color:var(--color-brand-text)}
-.pad{height:260px}.pad.s{height:70px}
+.us{display:flex;gap:12px;align-items:center}.pie{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--color-fg-tertiary)}.pie i{width:26px;height:26px;border-radius:50%;background:conic-gradient(var(--c) calc(var(--p)*1%),var(--color-surface-4) 0);display:grid;place-items:center}.pie i::after{content:"";width:16px;height:16px;border-radius:50%;background:var(--color-bg-raised)}.pie b{color:var(--color-fg-secondary);font-weight:600;font-variant-numeric:tabular-nums}.pie.mid{--c:var(--color-state-warning)}.pie.hi{--c:var(--color-state-danger)}.pie{--c:var(--color-state-success)}.pad{height:260px}.pad.s{height:70px}
 .narrow{width:820px}
 .dark{color-scheme:dark}
 </style>
@@ -32,6 +32,7 @@ h2{margin:0 0 6px;font:600 12px system-ui;color:#fff}
 const P=[['Kontrollrummet','K','#7f44ee',3],['Butiken','B','#0f8a5f',2],['Bokning','B','#c2410c',0],['Intranät','I','#007eaa',0]];
 const gear='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
 const logo=(p)=>`<span class="logo" style="background:${p[2]}">${p[1]}</span>`;
+const usage=n=>[["5 h",38,"","återställs 18:40 · om 2 h 10 min"],["Vecka",74,"mid","återställs fre 09:00 · om 2 d"]].map(u=>`<div class="pie ${u[2]}" title="${u[0]}: ${u[1]} procent, ${u[3]}" role="meter" aria-valuenow="${u[1]}"><i style="--p:${u[1]}"></i>${n?"":`<span>${u[0]} <b>${u[1]}%</b></span>`}</div>`).join("");
 function frame(dark,open,narrow){
  const others=P.slice(1).reduce((a,p)=>a+p[3],0);
  const menu=open?`<div class="menu" role="menu">${P.map((p,i)=>`<div class="mi ${i?'':'sel'}">${logo(p)}<span class="n">${p[0]}</span>${p[3]?`<span class="cnt ${i?'other':''}">${p[3]}</span>`:''}</div>`).join('')}<div class="mi new">+ Nytt projekt</div></div>`:'';
@@ -41,7 +42,7 @@ function frame(dark,open,narrow){
  <button class="pbtn" aria-haspopup="menu" aria-expanded="${open}">${logo(P[0])}${narrow?'':'Kontrollrummet'}<span class="cnt other" title="Annat projekt behöver dig">${others}</span>⌄</button>
  ${narrow?'':'<div class="tab on">Kontoret</div><div class="tab">Planer <span class="cnt">1</span></div><div class="tab">Releases</div><div class="tab">Inställningar</div>'}
  <div class="sp"></div>${narrow?'':'<div class="st">2/5 vid tangentbordet</div>'}
- <div class="av on" title="Gudfadern"><span class="cnt">2</span></div><div class="ib">🔔</div><div class="ib">◐</div>
+ <div class="av on" title="Gudfadern"><span class="cnt">2</span></div><div class="us">${usage(narrow)}</div><div class="ib" title="Systemnotiser är på"><svg viewBox="0 0 640 640" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M320 64C306.7 64 296 74.7 296 88L296 97.7C214.6 109.3 152 179.4 152 264L152 278.5C152 316.2 142 353.2 123 385.8L101.1 423.2C97.8 429 96 435.5 96 442.2C96 463.1 112.9 480 133.8 480L506.2 480C527.1 480 544 463.1 544 442.2C544 435.5 542.2 428.9 538.9 423.2L517 385.7C498 353.1 488 316.1 488 278.4L488 263.9C488 179.3 425.4 109.2 344 97.6L344 87.9C344 74.6 333.3 63.9 320 63.9zM488.4 432L151.5 432L164.4 409.9C187.7 370 200 324.6 200 278.5L200 264C200 197.7 253.7 144 320 144C386.3 144 440 197.7 440 264L440 278.5C440 324.7 452.3 370 475.5 409.9L488.4 432zM252.1 528C262 556 288.7 576 320 576C351.3 576 378 556 387.9 528L252.1 528z"/></svg></div><div class="ib" title="Tema"><svg viewBox="0 0 640 640" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M344 526.6L344 113.3C447.6 125.3 528 213.2 528 320C528 426.8 447.6 514.7 344 526.6zM296 526.6C192.4 514.7 112 426.8 112 320C112 213.2 192.4 125.3 296 113.4L296 526.7zM320 576C461.4 576 576 461.4 576 320C576 178.6 461.4 64 320 64C178.6 64 64 178.6 64 320C64 461.4 178.6 576 320 576z"/></svg></div>
  <div class="ib on" title="Inställningar för appen" aria-label="Inställningar för appen">${gear}</div></header>
  ${menu}<div class="pad ${open?'':'s'}"></div></div></section>`}
 document.body.insertAdjacentHTML('beforeend',[[0,0,0],[0,1,0],[1,0,0],[1,1,0],[0,0,1],[0,1,1],[1,1,1]].map(a=>frame(...a)).join(''));
