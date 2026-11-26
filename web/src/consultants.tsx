@@ -25,6 +25,8 @@ const PROVIDER_LABEL: Record<string, string> = {
   grok: 'xAI Grok',
   perplexity: 'Perplexity',
   copilot: 'GitHub Copilot',
+  foundry: 'Microsoft Foundry',
+  'openai-compatible': 'OpenAI-kompatibel endpoint',
   runway: 'Runway',
   elevenlabs: 'ElevenLabs',
   suno: 'Suno',
@@ -73,6 +75,7 @@ const SERVICE: Record<string, string> = {
   deepl: 'DeepL',
   perplexity: 'Perplexity',
   copilot: 'GitHub Copilot',
+  foundry: 'Microsoft Foundry',
   stability: 'Stability',
 };
 const USABLE = new Set<string>(Object.keys(PROVIDER_LABEL));
@@ -370,6 +373,7 @@ function ModelInput({ value, onChange, placeholder, error }: { value: string; on
 
 function ModelPicker({ provider, kind, value, onChange }: { provider: ConsultantProvider; kind: Consultant['kind']; value: string; onChange: (m: string) => void }) {
   if (provider === 'copilot') return <CopilotModelPicker value={value} onChange={onChange} />;
+  if (provider === 'foundry' || provider === 'openai-compatible') return <DeploymentPicker provider={provider} value={value} onChange={onChange} />;
   return <PlainModelPicker provider={provider} kind={kind} value={value} onChange={onChange} />;
 }
 
@@ -700,6 +704,115 @@ function CopilotRow({ reload }: { reload: () => void }) {
   );
 }
 
+interface CompatProfile {
+  id: string;
+  label: string;
+  deployment: string;
+  why: string;
+}
+interface CompatStatus {
+  limit: number;
+  usedToday: number;
+  providers: { provider: 'foundry' | 'openai-compatible'; hasKey: boolean; hasEndpoint: boolean }[];
+  profiles: CompatProfile[];
+}
+
+/** Foundry and other OpenAI-compatible providers: the deployment is named by hand, with profiles to start from. */
+function DeploymentPicker({ provider, value, onChange }: { provider: ConsultantProvider; value: string; onChange: (m: string) => void }) {
+  const [profiles, setProfiles] = useState<CompatProfile[]>([]);
+  useEffect(() => {
+    fetch('/api/consultants/compat')
+      .then((r) => r.json() as Promise<CompatStatus>)
+      .then((d) => setProfiles(d.profiles ?? []))
+      .catch(() => undefined);
+  }, []);
+  const chosen = profiles.find((p) => p.deployment === value);
+  return (
+    <label className="field">
+      <span>{provider === 'foundry' ? 'Deployment-namn' : 'Modell'}</span>
+      <input className="mono" value={value} placeholder={provider === 'foundry' ? 'Namnet du gav deploymentet i Foundry' : 'Modellens namn hos endpointen'} onChange={(e) => onChange(e.target.value)} />
+      {profiles.length > 0 && (
+        <span className="tips">
+          {profiles.map((p) => (
+            <button key={p.id} type="button" className="tip tip-usable" title={`${p.why} Fyller i ${p.deployment}; byt till det du själv har kallat deploymentet.`} onClick={() => onChange(p.deployment)}>
+              {p.label}
+            </button>
+          ))}
+        </span>
+      )}
+      <small className="settings-muted">{chosen ? chosen.why : 'Profilerna fyller bara i ett förslag. Namnet måste vara exakt som deploymentet heter hos dig.'}</small>
+    </label>
+  );
+}
+
+/** The endpoint and day limit for Foundry and OpenAI-compatible providers. The address is written, never shown again. */
+function CompatRow({ used, reload }: { used: string[]; reload: () => void }) {
+  const [st, setSt] = useState<CompatStatus | null>(null);
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [day, setDay] = useState('');
+  const [saved, setSaved] = useState(false);
+  const save = useAction();
+  const load = () =>
+    fetch('/api/consultants/compat')
+      .then((r) => r.json() as Promise<CompatStatus>)
+      .then((d) => {
+        setSt(d);
+        setDay(String(d.limit));
+      })
+      .catch(() => undefined);
+  useEffect(() => {
+    void load();
+  }, []);
+  if (!st) return null;
+  const rows = st.providers.filter((p) => used.includes(p.provider));
+  const typed = Object.values(urls).some((u) => u.trim());
+  const changed = typed || day !== String(st.limit);
+  return (
+    <div className="copilot-row">
+      <form
+        className="copilot-limits"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save.run(async () => {
+            const endpoints = Object.fromEntries(Object.entries(urls).filter(([, u]) => u.trim()));
+            await put('/api/consultants/compat', { endpoints, day: Number(day) });
+            setUrls({});
+            await load();
+            setSaved(true);
+            reload();
+          });
+        }}
+      >
+        {rows.map((p) => (
+          <label className="field" key={p.provider}>
+            <span>
+              Endpoint för {PROVIDER_LABEL[p.provider]} · {p.hasEndpoint ? 'satt' : 'saknas'}
+            </span>
+            <input
+              className="mono"
+              value={urls[p.provider] ?? ''}
+              placeholder={p.hasEndpoint ? 'Skriv en ny adress för att byta' : 'https://…'}
+              onChange={(e) => { setUrls({ ...urls, [p.provider]: e.target.value }); setSaved(false); }}
+            />
+          </label>
+        ))}
+        <label className="field">
+          <span>Gräns per dag (frågor)</span>
+          <input type="number" min="1" value={day} onChange={(e) => { setDay(e.target.value); setSaved(false); }} />
+        </label>
+        <button type="submit" className="btn" disabled={save.busy || !changed}>
+          Spara
+        </button>
+        {saved && !changed && <span className="saved">Sparat</span>}
+      </form>
+      <p className="settings-muted">
+        Adressen sparas lokalt på den här datorn (aldrig i repot) och visas inte igen. Använt idag: {st.usedToday} av {st.limit} frågor. När gränsen är nådd nekas frågorna.
+      </p>
+      {save.error && <span className="composer-error">{save.error}</span>}
+    </div>
+  );
+}
+
 function ApiKeys({ catalog, reload }: { catalog: Catalog; reload: () => void }) {
   const open = useAction();
   const [opened, setOpened] = useState(false);
@@ -735,6 +848,7 @@ function ApiKeys({ catalog, reload }: { catalog: Catalog; reload: () => void }) 
         ))}
       </ul>
       {used.includes('copilot') && <CopilotRow reload={reload} />}
+      {(used.includes('foundry') || used.includes('openai-compatible')) && <CompatRow used={used} reload={reload} />}
       {opened && (
         <p className="saved">
           Klistra in nyckeln i terminalfönstret och tryck Enter.{' '}
