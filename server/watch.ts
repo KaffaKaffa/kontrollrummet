@@ -691,7 +691,7 @@ function syncState(): Record<string, string> {
 async function checkFigmaSync() {
   const state = syncState();
   for (const team of loadTeams()) {
-    const designer = team.roles.find((r) => r.kind === 'designer');
+    const designer = team.roles.find((r) => r.kind === 'designer' && r.medium === 'figma');
     if (!designer || !team.figmaSync.length) continue;
     const since = state[team.id];
     if (!since) {

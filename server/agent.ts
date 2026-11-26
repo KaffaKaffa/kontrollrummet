@@ -12,7 +12,7 @@ import { addGrant, allowedFor, neverFor } from './grants.ts';
 import { rulesFor } from './permissions.ts';
 import { bus } from './bus.ts';
 import { addEvent, getMark, getSubtask, setMark, updateSubtask, type EventKind, type Subtask } from './db.ts';
-import { getTeam, peopleNames, peopleSection, readNotes, repoFor, who, type Role, type Team } from './roles.ts';
+import { getTeam, promptFor, peopleNames, peopleSection, readNotes, repoFor, who, type Role, type Team } from './roles.ts';
 import { OWNER, withOwner } from './owner.ts';
 import { IMAGES_DIR, shownText } from './images.ts';
 import { infraEnv, infraSection } from './infra.ts';
@@ -200,7 +200,7 @@ function sharedSection(team: Team): string {
 function systemPrompt(team: Team, role: Role, subtask: Subtask, prHow: string): string {
   const parts = [
     team.prompt,
-    `## Din roll: ${role.name} i team ${team.name}${role.nick ? `\n\nDu heter ${role.nick}. Så kallar alla i projektet dig.` : ''}\n\n${role.prompt}`,
+    `## Din roll: ${role.name} i team ${team.name}${role.nick ? `\n\nDu heter ${role.nick}. Så kallar alla i projektet dig.` : ''}\n\n${promptFor(role)}`,
     role.owns.length ? `Du äger: ${role.owns.join(', ')}.` : '',
     peopleSection(team),
     `## Teamet\n\n${team.roles.map((r) => `- ${r.id}: ${who(r)}, ${r.title}${team.repos.length > 1 && r.repos.length ? ` (repo: ${r.repos.join(', ')})` : ''}`).join('\n')}${
