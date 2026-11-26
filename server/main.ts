@@ -195,6 +195,7 @@ function state() {
       azure: t.repos.some((r) => hostOfRepo(r.path) === 'azure'),
       disabledSkills: t.disabledSkills,
       maxAgents: t.maxAgents,
+      office: t.office,
       hasLogo: Boolean(logoPath(t.id)),
       mcpServers: availableServers(t).map(({ id, label, note, source, auth, suggestWhen }) => ({ id, label, note, source: sourceLabel(source), auth, suggestWhen })),
       teamPrompt: t.teamPrompt,

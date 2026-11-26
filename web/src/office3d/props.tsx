@@ -29,6 +29,7 @@ export const C = {
   net: '#f2f2f2',
   metal: '#9aa1ab',
   glass: '#bfe3ff',
+  glassGlow: '#dff2ff',
   rug: '#c9d8e8',
   wood: '#b98e66',
   whiteboard: '#fbfbfb',
@@ -43,7 +44,11 @@ function Mat({ color, rough = 0.85, emissive, emissiveIntensity = 0 }: { color: 
 
 const at = (p: P, y = 0): [number, number, number] => [p[0], y, p[1]];
 
-export function Floor({ layout }: { layout: Layout }) {
+/** A theme's colours over the office's own (themes.ts). */
+export type Palette = Partial<typeof C>;
+
+export function Floor({ layout, colors = {} }: { layout: Layout; colors?: Palette }) {
+  const c = { ...C, ...colors };
   const w = layout.maxX - layout.minX;
   const d = layout.maxZ - layout.minZ;
   const cx = (layout.maxX + layout.minX) / 2;
@@ -52,20 +57,21 @@ export function Floor({ layout }: { layout: Layout }) {
     <group>
       {/* The floor as a thick slab, like a diorama base. */}
       <RoundedBox args={[w, 0.4, d]} radius={0.15} position={[cx, -0.2, cz]} receiveShadow>
-        <Mat color={C.floor} />
+        <Mat color={c.floor} />
       </RoundedBox>
       <RoundedBox args={[w + 0.3, 0.3, d + 0.3]} radius={0.12} position={[cx, -0.42, cz]}>
-        <Mat color={C.floorEdge} />
+        <Mat color={c.floorEdge} />
       </RoundedBox>
       {/* A rug under the lounge. */}
       <RoundedBox args={[6.6, 0.02, 4.4]} radius={0.01} position={[layout.pingpong.table[0] - 0.4, 0.01, 0.2]} receiveShadow>
-        <Mat color={C.rug} />
+        <Mat color={c.rug} />
       </RoundedBox>
     </group>
   );
 }
 
-export function Walls({ layout }: { layout: Layout }) {
+export function Walls({ layout, colors = {} }: { layout: Layout; colors?: Palette }) {
+  const c = { ...C, ...colors };
   const w = layout.maxX - layout.minX;
   const cx = (layout.maxX + layout.minX) / 2;
   const z = layout.minZ;
@@ -73,21 +79,21 @@ export function Walls({ layout }: { layout: Layout }) {
     <group>
       {/* The back wall with windows, and a low wall at the left. */}
       <RoundedBox args={[w, 2.9, 0.22]} radius={0.06} position={[cx, 1.45, z - 0.11]} receiveShadow castShadow>
-        <Mat color={C.wall} />
+        <Mat color={c.wall} />
       </RoundedBox>
       {layout.windows.map((win, i) => (
         <group key={i} position={[win.pane, 1.65, z + 0.01]}>
           <RoundedBox args={[2.2, 1.4, 0.06]} radius={0.04}>
-            <Mat color={C.wood} />
+            <Mat color={c.wood} />
           </RoundedBox>
           <mesh position={[0, 0, 0.035]}>
             <planeGeometry args={[2.0, 1.2]} />
-            <meshStandardMaterial color={C.glass} emissive="#dff2ff" emissiveIntensity={0.6} roughness={0.2} />
+            <meshStandardMaterial color={c.glass} emissive={c.glassGlow} emissiveIntensity={0.6} roughness={0.2} />
           </mesh>
         </group>
       ))}
       <RoundedBox args={[0.22, 1.2, layout.maxZ - layout.minZ]} radius={0.06} position={[layout.minX - 0.11, 0.6, (layout.maxZ + layout.minZ) / 2]} receiveShadow>
-        <Mat color={C.wall} />
+        <Mat color={c.wall} />
       </RoundedBox>
     </group>
   );
@@ -325,7 +331,7 @@ export function PingPong({ layout, ball }: { layout: Layout; ball: () => [number
  * The fridge door, shown only when it is open: someone in front of it, a
  * light inside. Hinged at the fridge's front edge, swinging out.
  */
-export function FridgeDoor({ at, face, open }: { at: P; face: number; open: () => boolean }) {
+export function FridgeDoor({ at, face, open, color = '#a9dcc6' }: { at: P; face: number; open: () => boolean; color?: string }) {
   const door = useRef<THREE.Group>(null);
   const glow = useRef<THREE.Mesh>(null);
   const angle = useRef(0);
@@ -349,7 +355,7 @@ export function FridgeDoor({ at, face, open }: { at: P; face: number; open: () =
       <group ref={door} position={[0.35, 0, 0.35]} visible={false}>
         <mesh position={[-0.33, 1.02, 0.03]} castShadow>
           <boxGeometry args={[0.66, 1.45, 0.06]} />
-          <meshStandardMaterial color="#a9dcc6" roughness={0.45} />
+          <meshStandardMaterial color={color} roughness={0.45} />
         </mesh>
         {[1.25, 0.95, 0.65].map((y) => (
           <mesh key={y} position={[-0.33, y, -0.03]}>

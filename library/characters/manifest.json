@@ -209,6 +209,34 @@
       "rigTask": "01a1f874-e746-77d2-9e40-bbf47573e66b",
       "rigCharged": true,
       "rigged": true
+    },
+    "nisse": {
+      "imageTask": "01a21769-1283-71d6-9b62-bb43af5d02a2",
+      "imageCharged": true,
+      "rigTask": "01a2176a-2fd6-70e4-a604-44b517ad0a5f",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "nisse-2": {
+      "imageTask": "01a2176a-890e-72e5-87c1-8f7a59ccf0a5",
+      "imageCharged": true,
+      "rigTask": "01a2176b-a4d1-7102-a899-fedcae3ca539",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "tomte": {
+      "imageTask": "01a2176b-ff21-7053-b21b-2eaa9b03720e",
+      "imageCharged": true,
+      "rigTask": "01a2176c-f3f0-7571-9123-6189f271f87e",
+      "rigCharged": true,
+      "rigged": true
+    },
+    "ekonom": {
+      "imageTask": "01a21907-da88-73e5-883c-e77cf6d2a543",
+      "imageCharged": true,
+      "rigTask": "01a21909-4ae7-737b-a458-574a5e94462f",
+      "rigCharged": true,
+      "rigged": true
     }
   },
   "clips": {
@@ -439,7 +467,7 @@
       "file": "library/characters/_clips/test_phones.glb"
     }
   },
-  "spent": 2221,
+  "spent": 2961,
   "props": {
     "office_chair": {
       "preview": "01a1effc-9838-725b-bb6c-e5fec573eb74",
@@ -669,6 +697,174 @@
       "preview": "01a1f04e-2768-72de-aca0-52c81289b0cf",
       "previewCharged": true,
       "refine": "01a1f04e-d935-7344-ab90-c7b6efc026e0",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_bench": {
+      "preview": "01a21748-9a1d-7053-8ad1-33b4a47f5af4",
+      "previewCharged": true,
+      "refine": "01a21749-4b84-72e1-9a50-6f7c828dd236",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_lead_bench": {
+      "preview": "01a21749-b95f-7103-af8e-b4a94f15157e",
+      "previewCharged": true,
+      "refine": "01a2174a-6951-7593-90ab-24a8980348a5",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_chair": {
+      "preview": "01a2174a-c288-772f-a5b6-4b177767ffc5",
+      "previewCharged": true,
+      "refine": "01a2174b-5d87-7644-a3d7-b0baa3ccd709",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_tree": {
+      "preview": "01a2174b-b6c9-7529-9e84-8f2c01ff0875",
+      "previewCharged": true,
+      "refine": "01a2174e-c449-7255-ae44-1d28bbc29ea1",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_tree_small": {
+      "preview": "01a2174f-470f-72a5-ae5b-08117e431ba0",
+      "previewCharged": true,
+      "refine": "01a2174f-7a77-742e-8499-8d15c1ca4fd3",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_poinsettia": {
+      "preview": "01a21750-1162-77a9-9f74-c7473887dd8f",
+      "previewCharged": true,
+      "refine": "01a21750-5cff-708c-8ab3-522b96b94fb0",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_toyshelf": {
+      "preview": "01a21751-1dd9-718e-ada0-7af62be96263",
+      "previewCharged": true,
+      "refine": "01a21751-ce06-74f9-b615-6a56d78fd8cd",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_kitchen": {
+      "preview": "01a21752-5238-75bf-9cc5-b7a93758a5aa",
+      "previewCharged": true,
+      "refine": "01a21752-8502-7350-b19e-b67daed70d21",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_glogg": {
+      "preview": "01a21753-1bcd-7501-96c6-a30f604cc5ec",
+      "previewCharged": true,
+      "refine": "01a21754-0a9b-7689-b6cd-c4d93bcad46f",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_pantry": {
+      "preview": "01a21754-7856-77f2-98f4-1029dbd96433",
+      "previewCharged": true,
+      "refine": "01a21754-aaf7-72cb-8af0-663b7e5c1f17",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_fireplace": {
+      "preview": "01a21755-563b-730a-8bce-788f60526654",
+      "previewCharged": true,
+      "refine": "01a21756-44ae-72c9-96f2-4c364dc39b1a",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_sofa": {
+      "preview": "01a21756-c7c0-711d-8dc8-f56e58637ccd",
+      "previewCharged": true,
+      "refine": "01a21757-8ce6-7138-b536-a5a6cff0a18f",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_presents": {
+      "preview": "01a21758-1045-72ce-ae32-8d0b9b72b682",
+      "previewCharged": true,
+      "refine": "01a21758-44f0-7799-b1ef-dc5a44981813",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_armchair": {
+      "preview": "01a21758-c710-747b-8b5c-aa4316046b5e",
+      "previewCharged": true,
+      "refine": "01a21759-8be7-773d-9be4-21a38198c1ab",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_lantern": {
+      "preview": "01a2175a-0ee6-7235-b3ed-af8c3e81dfcb",
+      "previewCharged": true,
+      "refine": "01a2175a-418a-71ab-a171-d829f52e69e6",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_sack": {
+      "preview": "01a2175a-d8e4-7170-9553-24c1e4224c30",
+      "previewCharged": true,
+      "refine": "01a2175b-0c86-743d-ad6a-cc7183c0cef4",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_wishlist": {
+      "preview": "01a2175b-e298-71e0-8058-efc612712915",
+      "previewCharged": true,
+      "refine": "01a2175c-85ca-74f0-8487-5da969cd8402",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_basket": {
+      "preview": "01a2175d-3281-73b0-ba65-5e1fa9dba69a",
+      "previewCharged": true,
+      "refine": "01a2175d-652a-75f0-b490-717ac424ef00",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_luva": {
+      "preview": "01a2175e-1289-7126-89f6-8a01610de30a",
+      "previewCharged": true,
+      "refine": "01a2175f-3f60-7687-8158-b2637e5b4116",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_ws_lead": {
+      "preview": "01a2175f-ad66-7713-ade1-1926c21aac8e",
+      "previewCharged": true,
+      "refine": "01a21761-f25d-76e7-aa64-c7a143144e7d",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_ws_toys": {
+      "preview": "01a21762-754e-7208-872a-042328c949b3",
+      "previewCharged": true,
+      "refine": "01a21763-6483-7432-bd46-29c09b605401",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_ws_paint": {
+      "preview": "01a21763-bdd8-746e-b427-38738366b537",
+      "previewCharged": true,
+      "refine": "01a21764-81de-70f8-8acb-a77a76f6cba1",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_ws_wrap": {
+      "preview": "01a21764-efd7-7079-8cd0-ceb97df5a603",
+      "previewCharged": true,
+      "refine": "01a21765-b595-7699-b834-51176093e101",
+      "refineCharged": true,
+      "done": true
+    },
+    "xmas_ws_laptop": {
+      "preview": "01a21765-fa52-7114-bfa5-d104ca28cbdb",
+      "previewCharged": true,
+      "refine": "01a21766-81ad-7184-b6d4-481d5a7f1697",
       "refineCharged": true,
       "done": true
     }

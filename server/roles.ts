@@ -294,6 +294,8 @@ export interface Team {
   disabledSkills: string[];
   /** Most agents of this project working at once; null: no limit. */
   maxAgents: number | null;
+  /** How Kontoret 3D looks for this project: 'kontor' or 'verkstad' (the Christmas workshop). Local. */
+  office: string;
   /** MCP servers defined for the team in team.json, by id. */
   mcpServers: Record<string, Record<string, unknown>>;
   /** Environment variables for MCP servers, read from these keychain services at launch. */
@@ -418,6 +420,7 @@ function loadTeam(id: string): Team {
     reviewer?: string | string[];
     disabledSkills?: string[];
     maxAgents?: number;
+    office?: string;
     mcp?: Record<string, Record<string, unknown>>;
     secrets?: Record<string, string>;
     baseBranch?: string;
@@ -471,6 +474,7 @@ function loadTeam(id: string): Team {
     reviewer: [config.reviewer ?? []].flat(),
     disabledSkills: config.disabledSkills ?? [],
     maxAgents: cleanCap(config.maxAgents),
+    office: config.office === 'verkstad' ? 'verkstad' : 'kontor',
     mcpServers: config.mcp ?? {},
     secrets: config.secrets ?? {},
     baseBranch: config.baseBranch ?? 'main',
