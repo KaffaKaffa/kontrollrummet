@@ -373,7 +373,7 @@ function loginOf(raw: unknown): Login | null {
   const r = raw as Record<string, unknown>;
   const what = typeof r.what === 'string' ? r.what.trim() : '';
   if (!what) return null;
-  const fix = typeof r.fix === 'string' && /^(login-claude|login-host:(github|azure)|azure-profile|azure-portal|infra:[\w-]+|mcp-[\w.-]+)$/.test(r.fix.trim()) ? r.fix.trim() : undefined;
+  const fix = typeof r.fix === 'string' && /^(login-claude|login-foundry|login-host:(github|azure)|azure-profile|azure-portal|infra:[\w-]+|mcp-[\w.-]+)$/.test(r.fix.trim()) ? r.fix.trim() : undefined;
   const url = typeof r.url === 'string' && /^https:\/\//.test(r.url.trim()) ? r.url.trim() : undefined;
   return { what, ...(fix ? { fix } : {}), ...(url ? { url } : {}) };
 }
@@ -414,7 +414,7 @@ const TOOLS: Tool[] = [
             fix: {
               type: 'string',
               description:
-                'Om det loggas in med ett kommando: "login-host:github" (gh), "login-host:azure" (az), "azure-profile" (projektets az-profil för DevOps), "azure-portal" (projektets az-profil för Azure-portalen), "infra:<post-id>" (en post under Infrastruktur, står i din prompt), "mcp-<server-id>" (en MCP-server), "login-claude" (Claude-kontot).',
+                'Om det loggas in med ett kommando: "login-host:github" (gh), "login-host:azure" (az), "azure-profile" (projektets az-profil för DevOps), "azure-portal" (projektets az-profil för Azure-portalen), "infra:<post-id>" (en post under Infrastruktur, står i din prompt), "mcp-<server-id>" (en MCP-server), "login-claude" (Claude-kontot), "login-foundry" (Foundry-kontot: nyckel eller az login).',
             },
             url: { type: 'string', description: 'Annars: sidan där man loggar in i webbläsaren.' },
           },

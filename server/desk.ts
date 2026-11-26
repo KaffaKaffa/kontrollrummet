@@ -129,7 +129,7 @@ export const DESK_TOOLS: DeskTool[] = [
     name: 'accounts',
     description: 'Claude-kontona på Macen: id, namn, om de är inloggade och vilket som är standard.',
     inputSchema: { type: 'object', properties: {} },
-    run: () => accountsView().map((x) => `${x.id}: ${x.name}${x.isDefault ? ' (standard)' : ''}, ${x.loggedIn ? `inloggat som ${x.email}` : 'inte inloggat'}`).join('\n'),
+    run: () => accountsView().map((x) => `${x.id}: ${x.name}${x.isDefault ? ' (standard)' : ''}, ${x.kind === 'foundry' ? `Foundry, ${x.ready ? 'redo' : 'inte redo'} (${x.detail})` : x.loggedIn ? `inloggat som ${x.email}` : 'inte inloggat'}`).join('\n'),
   },
   {
     name: 'submit_task',

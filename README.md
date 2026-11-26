@@ -86,7 +86,7 @@ Klistra in det här i Claude Code (i en terminal, på datorn där Kontrollrummet
 Sätt upp Kontrollrummet åt mig: klona https://github.com/KaffaKaffa/kontrollrummet och följ SETUP.md i repot, steg för steg. Fråga mig bara det du inte kan ta reda på själv.
 ```
 
-Claude kontrollerar och installerar det som saknas, installerar Kontrollrummet med app och autostart, och skapar ditt första projekt från ett repo du pekar ut. Det du behöver göra själv är att logga in där ett terminalfönster ber om det. [`SETUP.md`](SETUP.md) visar exakt vad som händer.
+Claude kontrollerar och installerar det som saknas, installerar Kontrollrummet med app och autostart, och skapar ditt första projekt från ett repo du pekar ut. Det du behöver göra själv är att logga in där ett terminalfönster ber om det. [`SETUP.md`](SETUP.md) visar exakt vad som händer. Kör ni Claude via Microsoft Foundry: [`docs/foundry.md`](docs/foundry.md).
 
 ### Det här behöver du
 - **macOS** med Xcode Command Line Tools (för `swiftc` och `git`), eller **Windows 10/11** med Git.

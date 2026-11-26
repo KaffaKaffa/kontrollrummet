@@ -17,7 +17,7 @@ import { OWNER, withOwner } from './owner.ts';
 import { IMAGES_DIR, shownText } from './images.ts';
 import { infraEnv, infraSection } from './infra.ts';
 import { devAppsSection } from './devapps.ts';
-import { accountStatus, getAccount, hasSession } from './accounts.ts';
+import { accountLabel, accountStatus, getAccount, hasSession, isFoundry } from './accounts.ts';
 import { ensureWorktree } from './worktree.ts';
 import { serversFor, teamSecrets } from './mcp-servers.ts';
 import { ANY_PR_URL, prNumberOf, providerFor } from './git.ts';
@@ -344,7 +344,7 @@ function allowAndRerun(subtaskId: number, tool: string, what: string) {
 }
 
 /** Claude Code's own login is gone: the agent never got to start. */
-const CLAUDE_LOGGED_OUT = /failed to authenticate|oauth (session|token) (has )?expired|not logged in|please run \/login|invalid api key/i;
+const CLAUDE_LOGGED_OUT = /failed to authenticate|oauth (session|token) (has )?expired|not logged in|please run \/login|invalid api key|chainedtokencredential|azureadtokenprovider|defaultazurecredential/i;
 
 function finish(subtaskId: number, run: Run, code: number | null, stderr = '') {
   runs.delete(subtaskId);
@@ -376,13 +376,14 @@ function finish(subtaskId: number, run: Run, code: number | null, stderr = '') {
   }
   if (!run.stopped && !report && CLAUDE_LOGGED_OUT.test(`${run.error}\n${stderr}`)) {
     const account = getAccount(run.account);
-    const email = accountStatus(account).email;
-    const what = `Claude-kontot ${account.name}${email ? ` (${email})` : ''}`;
-    const question = `${what} är utloggat, så agenten kom aldrig igång. Logga in och tryck sedan Fortsätt.`;
+    const what = accountLabel(account);
+    const question = isFoundry(account)
+      ? `${what} kom inte in (${account.foundry!.auth === 'key' ? 'nyckeln saknas eller stämmer inte' : 'inte inloggad i Azure'}), så agenten kom aldrig igång. Åtgärda det och tryck sedan Fortsätt.`
+      : `${what} är utloggat, så agenten kom aldrig igång. Logga in och tryck sedan Fortsätt.`;
     patch(subtaskId, {
       status: 'needs-you',
       summary: question,
-      ask: { question, login: { what, fix: 'login-claude' }, retry: run.message },
+      ask: { question, login: { what, fix: isFoundry(account) ? 'login-foundry' : 'login-claude' }, retry: run.message },
     });
     log(subtaskId, 'status', `Utloggat: ${what}.`);
     return;
