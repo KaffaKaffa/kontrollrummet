@@ -1114,7 +1114,6 @@ function UsageMeter({ usage, account }: { usage: Usage | null; account?: Account
   const age = usage ? Math.round((now.getTime() - Date.parse(usage.seenAt)) / 60000) : null;
   return (
     <div className="usage" title={`${account ? `Konto: ${account.name}. ` : ''}${usage ? `Senast avläst för ${age} min sedan, när en agent körde.` : 'Ingen avläsning än. Den kommer med första agenten.'}`}>
-      {account && <span className="usage-account">{account.name}</span>}
       {windows.map(([label, w]) => {
         const at = w?.resetsAt ? new Date(w.resetsAt) : null;
         const left = at ? at.getTime() - now.getTime() : null;
@@ -1124,21 +1123,19 @@ function UsageMeter({ usage, account }: { usage: Usage | null; account?: Account
         const level = pct == null ? '' : pct >= 90 ? 'usage-high' : pct >= 70 ? 'usage-mid' : '';
         const when = at == null ? 'okänt' : reset ? 'återställd' : `${resetTime(at, now)} · om ${countdown(left!)}`;
         return (
-          <div key={label} className={`usage-row ${level}`}>
-            <span className="usage-label">{label}</span>
-            <span
-              className="usage-bar"
-              role="meter"
-              aria-label={`${label}: ${pct ?? 'okänt'} procent, återställs ${when}`}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={pct ?? 0}
-            >
-              <span style={{ width: `${pct ?? 0}%` }} />
-            </span>
-            <span className="usage-pct num">{pct == null ? '–' : `${pct}%`}</span>
-            <span className="usage-reset num" title={at ? `Återställs ${at.toLocaleString('sv-SE')}` : undefined}>
-              {when}
+          <div
+            key={label}
+            className={`usage-row ${level}`}
+            role="meter"
+            aria-label={`${label}: ${pct ?? 'okänt'} procent, återställs ${when}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={pct ?? 0}
+            title={`${label}: ${pct ?? 'okänt'} procent, återställs ${at ? at.toLocaleString('sv-SE') : 'okänt'} (${when})`}
+          >
+            <i className="usage-ring" style={{ '--p': pct ?? 0 } as CSSProperties} />
+            <span className="usage-text">
+              {label} <b className="num">{pct == null ? '–' : `${pct}%`}</b>
             </span>
           </div>
         );
@@ -1202,8 +1199,12 @@ export function App() {
   return (
     <div className="shell">
       <header className="topbar">
+        <div className="topbar-row">
         <h1 className="wordmark">
-          Kontroll<span>rummet</span>
+          <span className="wordmark-short">K</span>
+          <span className="wordmark-long">
+            Kontroll<span>rummet</span>
+          </span>
         </h1>
         <TeamMenu
           teams={board.teams}
@@ -1212,6 +1213,65 @@ export function App() {
           onNew={view === 'new'}
           attention={attention}
         />
+        <div className="topbar-spacer" />
+        <p className="topbar-status">
+          {board.restartPending ? (
+            <span className="restart-note">
+              Startar om för att ta ändringar i bruk{board.restartWaitingFor ? `, väntar på ${board.restartWaitingFor} ${board.restartWaitingFor > 1 ? 'agenter och byggen' : 'agent eller bygge'}` : ''}…
+            </span>
+          ) : board.connected && paused && Date.parse(paused) > Date.now() ? (
+            <span className="paused">
+              Kvoten är slut. Fortsätter {new Date(paused).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          ) : board.connected ? (
+            <>
+              <span className="pulse" aria-hidden="true" />
+              <span className="num">
+                {running}/{accountCap === null ? '∞' : accountCap}
+              </span>{' '}
+              <span className="status-long"> vid tangentbordet</span>
+              {teamCap !== null && view !== 'gudfadern' && (
+                <>
+                  <span className="status-long">{' · '}</span>
+                  <span className="num status-long">
+                    {teamRunning}/{teamCap}
+                  </span>
+                  <span className="status-long"> i projektet</span>
+                </>
+              )}
+            </>
+          ) : (
+            <span className="offline">Ingen kontakt med servern</span>
+          )}
+        </p>
+        {board.connected && !board.restartPending && (
+          <button
+            type="button"
+            className="icon-btn restart-btn"
+            title="Starta om servern (väntar tills inga agenter arbetar)"
+            aria-label="Starta om servern"
+            onClick={() => {
+              if (window.confirm('Starta om servern? Den väntar tills inga agenter arbetar, och bygger om webben.')) void post('/api/restart');
+            }}
+          >
+            ↻
+          </button>
+        )}
+        <a className="godfather-link" href="#/gudfadern" aria-label="Gudfadern" title="Gudfadern" aria-current={view === 'gudfadern' ? 'page' : undefined}>
+          <img src="/api/faces/godfather" alt="" width={32} height={32} />
+          {board.approvals.some((a) => a.conversationId) && <span className="count num">{board.approvals.filter((a) => a.conversationId).length}</span>}
+        </a>
+        {account?.kind !== 'foundry' && <UsageMeter usage={account ? (board.usage[account.id] ?? null) : null} account={board.accounts.length > 1 ? account : undefined} />}
+        <NotifyToggle />
+        <ThemeToggle />
+        <a className="icon-btn settings-link" href="#/installningar" title="Inställningar för appen" aria-label="Inställningar för appen" aria-current={view === 'app' ? 'page' : undefined}>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+          </svg>
+        </a>
+        </div>
+        <div className="topbar-sub">
         {team && view !== 'gudfadern' && view !== 'new' && view !== 'app' && (
           <nav aria-label="Vyer" className="tabs">
             <a href={`#/${team.id}/office`} aria-current={view === 'office' ? 'page' : undefined}>
@@ -1234,62 +1294,12 @@ export function App() {
           </nav>
         )}
         {team && view !== 'gudfadern' && view !== 'new' && view !== 'app' && <DevAppButtons board={board} team={team} watchDevLog={watchDevLog} />}
-        <a className="godfather-link" href="#/gudfadern" aria-label="Gudfadern" title="Gudfadern" aria-current={view === 'gudfadern' ? 'page' : undefined}>
-          <img src="/api/faces/godfather" alt="" width={32} height={32} />
-          {board.approvals.some((a) => a.conversationId) && <span className="count num">{board.approvals.filter((a) => a.conversationId).length}</span>}
-        </a>
-        {account?.kind !== 'foundry' && <UsageMeter usage={account ? (board.usage[account.id] ?? null) : null} account={board.accounts.length > 1 ? account : undefined} />}
-        <p className="topbar-status">
-          {board.restartPending ? (
-            <span className="restart-note">
-              Startar om för att ta ändringar i bruk{board.restartWaitingFor ? `, väntar på ${board.restartWaitingFor} ${board.restartWaitingFor > 1 ? 'agenter och byggen' : 'agent eller bygge'}` : ''}…
+          {board.connected && teamCap !== null && view !== 'gudfadern' && view !== 'new' && view !== 'app' && (
+            <span className="sub-project num">
+              {teamRunning}/{teamCap} i projektet
             </span>
-          ) : board.connected && paused && Date.parse(paused) > Date.now() ? (
-            <span className="paused">
-              Kvoten är slut. Fortsätter {new Date(paused).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          ) : board.connected ? (
-            <>
-              <span className="pulse" aria-hidden="true" />
-              <span className="num">
-                {running}/{accountCap === null ? '∞' : accountCap}
-              </span>{' '}
-              vid tangentbordet
-              {teamCap !== null && view !== 'gudfadern' && (
-                <>
-                  {' · '}
-                  <span className="num">
-                    {teamRunning}/{teamCap}
-                  </span>{' '}
-                  i projektet
-                </>
-              )}
-            </>
-          ) : (
-            <span className="offline">Ingen kontakt med servern</span>
           )}
-          {board.connected && !board.restartPending && (
-            <button
-              type="button"
-              className="icon-btn restart-btn"
-              title="Starta om servern (väntar tills inga agenter arbetar)"
-              aria-label="Starta om servern"
-              onClick={() => {
-                if (window.confirm('Starta om servern? Den väntar tills inga agenter arbetar, och bygger om webben.')) void post('/api/restart');
-              }}
-            >
-              ↻
-            </button>
-          )}
-        </p>
-        <NotifyToggle />
-        <ThemeToggle />
-        <a className="icon-btn settings-link" href="#/installningar" title="Inställningar för appen" aria-label="Inställningar för appen" aria-current={view === 'app' ? 'page' : undefined}>
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-          </svg>
-        </a>
+        </div>
       </header>
       <main>
         <ViewBoundary key={`${view}-${team?.id ?? ''}`}>

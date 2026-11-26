@@ -4226,3 +4226,200 @@ button.link-chip {
   background: var(--color-surface-3);
   color: var(--color-fg-primary);
 }
+
+/* ------------------------------------------------------------ top bar: two rows (design/toppmeny.html)
+   Row 1: wordmark, project, status, restart, avatar, meters, notifications, theme, settings.
+   Row 2: the views on the left, the dev buttons on the right. Same in every width. */
+.topbar {
+  display: block;
+  padding: 0;
+  min-height: 0;
+  flex-wrap: nowrap;
+}
+
+.topbar .topbar-row,
+.topbar .topbar-sub {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  padding: 0 var(--layout-gutter);
+}
+
+.topbar .topbar-row {
+  height: var(--layout-topbar-height);
+}
+
+.topbar .topbar-sub {
+  height: var(--space-40, 40px);
+  border-top: 1px solid var(--color-line-hairline);
+}
+
+.topbar .topbar-spacer {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.topbar .topbar-row > * {
+  flex: none;
+}
+
+.topbar .topbar-status,
+.topbar .topbar-row .usage {
+  margin-left: 0;
+}
+
+.topbar .topbar-status {
+  display: flex;
+  white-space: nowrap;
+}
+
+.wordmark .wordmark-short {
+  display: none;
+}
+
+.wordmark .wordmark-long {
+  display: inline;
+}
+
+.wordmark span {
+  color: inherit;
+}
+
+.wordmark .wordmark-short,
+.wordmark .wordmark-long > span {
+  color: var(--color-brand-text);
+}
+
+.topbar .topbar-sub .tabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.topbar .topbar-sub .devapp-bar {
+  margin-left: auto;
+  flex: none;
+  overflow: visible;
+}
+
+.topbar .topbar-sub .sub-project {
+  display: none;
+  flex: none;
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-footnote-size);
+  white-space: nowrap;
+}
+
+.topbar .tabs .count,
+.topbar .godfather-link .count {
+  background: var(--color-brand-fill);
+  color: var(--color-fg-on-brand);
+}
+
+.topbar .team-menu-btn .count,
+.team-menu-list a:not([aria-current='page']) .count {
+  background: var(--color-state-warning);
+  color: var(--color-fg-on-state);
+}
+
+.team-menu-list a[aria-current='page'] {
+  background: var(--color-brand-tint);
+  box-shadow: none;
+}
+
+.team-menu-list a[aria-current='page'] .count {
+  background: var(--color-brand-fill);
+  color: var(--color-fg-on-brand);
+}
+
+.topbar .settings-link[aria-current='page'] {
+  background: var(--color-brand-tint);
+  color: var(--color-brand-text);
+  box-shadow: inset 0 0 0 1px var(--color-brand-fill);
+}
+
+.topbar .topbar-row .usage {
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-12);
+  min-width: 0;
+  width: auto;
+  order: 0;
+  overflow: visible;
+}
+
+.topbar .usage-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  white-space: nowrap;
+}
+
+.usage-ring {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-full);
+  background: conic-gradient(var(--usage-color, var(--color-state-success)) calc(var(--p) * 1%), var(--color-surface-4) 0);
+}
+
+.usage-ring::after {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-raised, var(--color-surface-1));
+}
+
+.usage-mid {
+  --usage-color: var(--color-state-warning);
+}
+
+.usage-high {
+  --usage-color: var(--color-state-danger);
+}
+
+@media (max-width: 1100px) {
+  .topbar .topbar-row,
+  .topbar .topbar-sub {
+    gap: var(--space-12);
+    padding: 0 var(--space-16);
+  }
+
+  .wordmark .wordmark-short {
+    display: inline;
+  }
+
+  .wordmark .wordmark-long,
+  .topbar .status-long,
+  .topbar .usage-text,
+  .topbar .team-menu-btn .team-menu-name {
+    display: none;
+  }
+
+  .team-menu-list .team-menu-name {
+    display: inline;
+  }
+
+  .topbar .topbar-sub .sub-project {
+    display: inline;
+  }
+}
+
+.topbar .topbar-row > .topbar-spacer {
+  flex: 1 1 0;
+}
+
+.topbar .restart-btn {
+  width: var(--space-32, 32px);
+  height: var(--space-32, 32px);
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.topbar .topbar-sub:empty {
+  display: none;
+}
