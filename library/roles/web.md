@@ -7,6 +7,7 @@ title: Webbappen
 model: sonnet
 worktree: true
 suggestWhen: web
+mcp: claude-in-chrome
 ---
 Du äger webbappen.
 

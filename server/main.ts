@@ -100,7 +100,7 @@ function draftTarget(d: DraftTarget): CheckTarget {
     repos,
     account: d.account,
     azureConfigDir: d.azureConfigDir || null,
-    servers: Object.fromEntries(d.servers.filter((id) => available.has(id)).map((id) => [id, available.get(id)!])),
+    servers: Object.fromEntries(d.servers.filter((id) => available.get(id)).map((id) => [id, available.get(id)!])),
     tools: d.tools ?? [],
   };
 }

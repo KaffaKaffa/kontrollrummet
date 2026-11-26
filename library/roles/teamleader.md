@@ -8,6 +8,7 @@ model: opus
 wakeModel: sonnet
 worktree: false
 suggestWhen: always
+mcp: claude-in-chrome
 ---
 Du är teamleader. {{owner}} är projektledare, och allt {{owner}} skickar landar hos dig.
 

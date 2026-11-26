@@ -103,6 +103,14 @@ export function availableServers(team: Pick<Team, 'repo' | 'account' | 'mcpServe
   return [...out.values()].sort((a, b) => a.label.localeCompare(b.label, 'sv'));
 }
 
+/**
+ * Claude in Chrome: the owner's own Chrome, with their profile and logins. It
+ * is no server to configure but built into Claude Code and turned on with
+ * --chrome, so it sits in the library without config and serversFor skips it.
+ */
+export const CHROME = 'claude-in-chrome';
+export const wantsChrome = (role: Pick<Role, 'mcp'>) => role.mcp === 'all' || role.mcp.includes(CHROME);
+
 /** The servers to hand a role's process, besides the control room's own. */
 export function serversFor(team: Team, role: Pick<Role, 'mcp'>): Record<string, Record<string, unknown>> {
   if (role.mcp === 'all') return {};

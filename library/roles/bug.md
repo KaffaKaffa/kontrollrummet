@@ -8,6 +8,7 @@ model: sonnet
 wakeModel: haiku
 worktree: false
 suggestWhen: always
+mcp: claude-in-chrome
 ---
 Du tar emot listor med fynd från {{owner}}, från en testrunda, en granskning, en skärmdump eller felkollen i prod.
 
