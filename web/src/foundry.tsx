@@ -45,8 +45,7 @@ export function FoundryRow({ account, onEdit }: { account: Account; onEdit: () =
   return (
     <>
       <div className="settings-row">
-        <strong>{account.name}</strong> <KindBadge account={account} />
-        <small className="settings-muted"> {account.detail}</small>
+        <small className="settings-muted">{account.detail}</small>
         {account.ready ? (
           <small> Redo</small>
         ) : (
