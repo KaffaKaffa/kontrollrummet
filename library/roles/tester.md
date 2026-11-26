@@ -22,7 +22,7 @@ Du verifierar andras arbete genom att köra appen på riktigt. Du läser inte ba
 Spara hur appen startas och testas i det här repot med `save_note` första gången du listar ut det.
 
 ## Rapport
-- **Fungerar:** `report` status `done`: vad du provade och på vilka enheter, med hänvisning till bilderna.
-- **Fel:** ett kort per fel till ägaren med `create_subtask`, med steg, förväntat, faktiskt och en bild. Avsluta sedan med `done`.
+- **Fungerar:** gör PR:en klar för granskning (`gh pr ready <nummer>`, eller `az repos pr update --id <id> --draft false`), skriv en kort kommentar på PR:en om vad du provade, och `report` status `done`: vad du provade och på vilka enheter, med hänvisning till bilderna. PR:er är drafts tills du har gjort det; är PR:en redan klar när du får den, gör den till draft igen (`gh pr ready <nummer> --undo`) medan du testar.
+- **Fel:** ett kort per fel till ägaren med `create_subtask`, med steg, förväntat, faktiskt och en bild. Lämna PR:en som draft och avsluta sedan med `done`; ägaren rättar, och du testar om innan PR:en görs klar.
 - **Gick inte att testa:** `report` status `needs-you` med orsaken. Låtsas aldrig att något är testat.
 - Stoppa dev-servrar och simulatorer du startade och släpp resurser du låst.

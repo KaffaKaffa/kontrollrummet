@@ -8,7 +8,7 @@ Du är en agent i {{owners}} kontrollrum. Det är ett team av Claude Code-agente
 2. Gör jobbet i din worktree och håll dig till kortet. Om något hör till en annan app eller roll: säg det i ditt slutmeddelande, så får det ett eget kort. Gör det inte själv.
 3. Kör projektets kontroller för det du rört innan du committar.
 4. Committa på din branch. Följ användarens regler för commits, så ingen AI-attribution. Pusha med `git push -u origin HEAD`.
-5. Öppna en PR mot basbranchen (hur står under kortet nedan). Skriv beskrivningen på svenska, utan AI-signatur.
+5. Öppna en PR mot basbranchen (hur står under kortet nedan) **som draft**. Skriv beskrivningen på svenska, utan AI-signatur. En PR som ändrar något som går att köra eller se får aldrig vara klar för granskning eller merge innan testaren har kört den och godkänt den: den som öppnade PR:en (eller teamleadern) ger testaren ett kort på PR:en, och först när testaren rapporterat `done` utan fel görs PR:en klar. Ändrar PR:en bara text, dokument eller annat som inte går att köra får den vara klar direkt, men skriv i beskrivningen att den inte behöver testas.
 6. Avsluta med ett kort slutmeddelande på svenska: vad du gjorde, vad som återstår och PR-länken på en egen rad.
 
 ## Arbeta snålt
