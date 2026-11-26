@@ -1,5 +1,5 @@
 import { ConsultantDesk, ConsultantFaces, ConsultantPanel } from './consultants.tsx';
-import { Component, lazy, Suspense, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { DevAppButtons } from './devapps.tsx';
 import { awaitsReview, calledOr, nameOf, reviewText, post, useBoard, type Account, type Board, type Notice, type OwnPr, type Plan, type PlanStatus, type Role, type Subtask, type Team, type Usage } from './api.ts';
 import { Markdown } from './markdown.tsx';
@@ -224,6 +224,62 @@ function Decision({ card, team, role, owner }: { card: Subtask; team: string; ro
 }
 
 /** Open PRs, one row per PR: nothing more happens on them until someone merges. */
+function TeamMenu({ teams, current, view, onNew, attention }: { teams: Team[]; current?: Team; view: string; onNew: boolean; attention: (id?: string) => number }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: MouseEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', outside);
+    return () => document.removeEventListener('mousedown', outside);
+  }, [open]);
+  const others = teams.filter((t) => t.id !== current?.id).reduce((n, t) => n + attention(t.id), 0);
+  const keys = (e: ReactKeyboardEvent) => {
+    if (e.key === 'Escape' && open) {
+      e.stopPropagation();
+      setOpen(false);
+      button.current?.focus();
+      return;
+    }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    if (!open) return setOpen(true);
+    const items = [...(root.current?.querySelectorAll<HTMLElement>('[role="menu"] a') ?? [])];
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    items[(at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+  };
+  const suffix = view === 'gudfadern' || view === 'new' || view === 'app' ? 'office' : view;
+  return (
+    <div className="team-menu" ref={root} onKeyDown={keys}>
+      <button ref={button} type="button" className="team-menu-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {current ? <Logo team={current} /> : null}
+        <span className="team-menu-name">{current?.name ?? (onNew ? 'Nytt projekt' : 'Projekt')}</span>
+        {others > 0 && <span className="count num" title="Något annat projekt behöver dig">{others}</span>}
+        <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M2.5 4.5 6 8l3.5-3.5" />
+        </svg>
+      </button>
+      {open && (
+        <div className="team-menu-list" role="menu" aria-label="Projekt" onClick={() => setOpen(false)}>
+          {teams.map((t) => (
+            <a key={t.id} role="menuitem" href={`#/${t.id}/${suffix}`} aria-current={t.id === current?.id ? 'page' : undefined}>
+              <Logo team={t} />
+              <span className="team-menu-name">{t.name}</span>
+              {attention(t.id) > 0 && <span className="count num">{attention(t.id)}</span>}
+            </a>
+          ))}
+          <a role="menuitem" className="team-menu-new" href="#/new" aria-current={onNew ? 'page' : undefined}>
+            <span aria-hidden="true">+</span> Nytt projekt
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function openPrs(board: TeamBoard): Subtask[] {
   const seen = new Set<number>();
   return board.subtasks.filter((s) => {
@@ -1134,10 +1190,6 @@ export function App() {
   const accountCap = account?.maxAgents ?? null;
   const teamCap = view === 'gudfadern' ? null : (team?.maxAgents ?? null);
   const teamRunning = board.subtasks.filter((s) => s.status === 'running' && s.team === team?.id).length;
-  // Keep the active project tab in view when the tab group scrolls sideways.
-  useEffect(() => {
-    document.querySelector('.topbar nav[aria-label="Team"] a[aria-current="page"]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
-  }, [team?.id, view, board.teams.length]);
   useEffect(() => {
     document.title = total > 0 ? `(${total}) Kontrollrummet` : 'Kontrollrummet';
     // Inside Kontrollrummet.app the number goes on the Dock icon.
@@ -1153,18 +1205,13 @@ export function App() {
         <h1 className="wordmark">
           Kontroll<span>rummet</span>
         </h1>
-        <nav aria-label="Team" className="tabs">
-          {board.teams.map((t) => (
-            <a key={t.id} href={`#/${t.id}/${view === 'gudfadern' || view === 'new' || view === 'app' ? 'office' : view}`} aria-current={view !== 'gudfadern' && view !== 'new' && view !== 'app' && t.id === team?.id ? 'page' : undefined}>
-              <Logo team={t} />
-              {t.name}
-              {attention(t.id) > 0 && <span className="count num">{attention(t.id)}</span>}
-            </a>
-          ))}
-          <a href="#/new" title="Nytt projekt" aria-label="Nytt projekt" aria-current={view === 'new' ? 'page' : undefined}>
-            +
-          </a>
-        </nav>
+        <TeamMenu
+          teams={board.teams}
+          current={view !== 'gudfadern' && view !== 'new' && view !== 'app' ? team : undefined}
+          view={view}
+          onNew={view === 'new'}
+          attention={attention}
+        />
         {team && view !== 'gudfadern' && view !== 'new' && view !== 'app' && (
           <nav aria-label="Vyer" className="tabs">
             <a href={`#/${team.id}/office`} aria-current={view === 'office' ? 'page' : undefined}>
@@ -1187,17 +1234,10 @@ export function App() {
           </nav>
         )}
         {team && view !== 'gudfadern' && view !== 'new' && view !== 'app' && <DevAppButtons board={board} team={team} watchDevLog={watchDevLog} />}
-        <nav aria-label="Gudfadern" className="tabs">
-          <a href="#/gudfadern" aria-current={view === 'gudfadern' ? 'page' : undefined}>
-            Gudfadern
-            {board.approvals.some((a) => a.conversationId) && <span className="count num">{board.approvals.filter((a) => a.conversationId).length}</span>}
-          </a>
-        </nav>
-        <nav aria-label="Appen" className="tabs">
-          <a href="#/installningar" aria-current={view === 'app' ? 'page' : undefined}>
-            Appen
-          </a>
-        </nav>
+        <a className="godfather-link" href="#/gudfadern" aria-label="Gudfadern" title="Gudfadern" aria-current={view === 'gudfadern' ? 'page' : undefined}>
+          <img src="/api/faces/godfather" alt="" width={32} height={32} />
+          {board.approvals.some((a) => a.conversationId) && <span className="count num">{board.approvals.filter((a) => a.conversationId).length}</span>}
+        </a>
         {account?.kind !== 'foundry' && <UsageMeter usage={account ? (board.usage[account.id] ?? null) : null} account={board.accounts.length > 1 ? account : undefined} />}
         <p className="topbar-status">
           {board.restartPending ? (
@@ -1244,6 +1284,12 @@ export function App() {
         </p>
         <NotifyToggle />
         <ThemeToggle />
+        <a className="icon-btn settings-link" href="#/installningar" title="Inställningar för appen" aria-label="Inställningar för appen" aria-current={view === 'app' ? 'page' : undefined}>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+          </svg>
+        </a>
       </header>
       <main>
         <ViewBoundary key={`${view}-${team?.id ?? ''}`}>
