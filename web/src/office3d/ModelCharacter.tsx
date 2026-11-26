@@ -1,6 +1,6 @@
 import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useMemo, useRef, type RefObject } from 'react';
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { ANIMATIONS_URL, modelUrl } from './characters.ts';
@@ -112,16 +112,79 @@ function PropMesh({ prop }: { prop: Prop }) {
   }
 }
 
+/** The workshop's nisse cap (scripts/characters.mjs props xmas_luva), white so it takes any colour. */
+const CAP_URL = '/office/xmas_luva.glb';
+/** How tall the cap stands on a head, and how far down over the head it sits, in metres. */
+const CAP_HEIGHT = 0.34;
+const CAP_SINK = 0.07;
+
+/**
+ * A cap on the head, in the colour given. It follows the top of the head in
+ * the person's own frame every frame, so the skeleton's scale never matters.
+ */
+function Cap({ color, scene, root }: { color: string; scene: THREE.Object3D; root: RefObject<THREE.Group | null> }) {
+  const gltf = useGLTF(CAP_URL);
+  const cap = useMemo(() => {
+    const o = gltf.scene.clone(true);
+    o.traverse((m) => {
+      const mesh = m as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = true;
+      const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
+      mat.color = new THREE.Color(color);
+      mesh.material = mat;
+    });
+    // Standing on its opening, centred, CAP_HEIGHT tall.
+    const box = new THREE.Box3().setFromObject(o);
+    const size = box.getSize(new THREE.Vector3());
+    o.scale.setScalar(size.y > 0 ? CAP_HEIGHT / size.y : 1);
+    const b2 = new THREE.Box3().setFromObject(o);
+    const c = b2.getCenter(new THREE.Vector3());
+    o.position.set(-c.x, -b2.min.y, -c.z);
+    const g = new THREE.Group();
+    g.add(o);
+    return g;
+  }, [gltf.scene, color]);
+  const bones = useMemo(() => {
+    let head: THREE.Object3D | null = null;
+    let top: THREE.Object3D | null = null;
+    scene.traverse((o) => {
+      const n = o.name.replace(/^mixamorig:?/i, '');
+      if (/^head$/i.test(n)) head = o;
+      if (/^headtop_?end$/i.test(n)) top = o;
+    });
+    return { head: head as THREE.Object3D | null, top: top as THREE.Object3D | null };
+  }, [scene]);
+  const a = useMemo(() => new THREE.Vector3(), []);
+  const b = useMemo(() => new THREE.Vector3(), []);
+  const up = useMemo(() => new THREE.Vector3(0, 1, 0), []);
+  useFrame(() => {
+    const r = root.current;
+    if (!r || !bones.head || !bones.top) return;
+    bones.head.getWorldPosition(a);
+    bones.top.getWorldPosition(b);
+    r.worldToLocal(a);
+    r.worldToLocal(b);
+    const dir = b.clone().sub(a).normalize();
+    cap.quaternion.setFromUnitVectors(up, dir);
+    cap.position.copy(b).addScaledVector(dir, -CAP_SINK);
+  });
+  return <primitive object={cap} />;
+}
+
 export function ModelCharacter({
   character,
   agent,
   onClick,
   onHover,
+  hat,
 }: {
   character: string;
   agent: () => Agent;
   onClick: () => void;
   onHover: (on: boolean) => void;
+  /** A cap's colour (the workshop's nisses), or nothing. */
+  hat?: string | null;
 }) {
   const model = useGLTF(modelUrl(character));
   const anims = useGLTF(ANIMATIONS_URL);
@@ -147,6 +210,25 @@ export function ModelCharacter({
     const c = clips.get('pingpong');
     return c ? { main: mixer.clipAction(c), seam: mixer.clipAction(c.clone()) } : null;
   }, [clips, mixer]);
+  /**
+   * The clips are made on the reference character and put the hips at its
+   * height. Someone with shorter legs (a nisse, Santa) would float: standing
+   * and walking, their hips go down by their own height over the reference's.
+   * Seated they stay where the clip puts them, on the chair.
+   */
+  const hips = useMemo(() => {
+    let own: THREE.Object3D | null = null;
+    let ref: THREE.Object3D | null = null;
+    scene.traverse((o) => {
+      if (!own && /hips$/i.test(o.name)) own = o;
+    });
+    anims.scene.traverse((o) => {
+      if (!ref && /hips$/i.test(o.name)) ref = o;
+    });
+    const bone = own as THREE.Object3D | null;
+    const refY = (ref as THREE.Object3D | null)?.position.y ?? 0;
+    return { bone, ratio: bone && refY > 0 ? bone.position.y / refY : 1, k: 1, written: NaN };
+  }, [scene, anims.scene]);
   const propShown = useRef<Prop>(null);
   const propKids = useRef<Record<string, THREE.Object3D | null>>({});
 
@@ -210,6 +292,17 @@ export function ModelCharacter({
       stroke.seam.setEffectiveWeight(ramp * w);
     }
     mixer.update(dt);
+    if (hips.bone && Math.abs(hips.ratio - 1) > 0.01) {
+      const seated = a.pose.startsWith('sit') || a.pose.startsWith('sofa');
+      // Eased, so sitting down and getting up do not jump.
+      hips.k += ((seated ? 1 : hips.ratio) - hips.k) * Math.min(1, dt * 4);
+      // Only over what the mixer wrote this frame; a clip without the hips' track leaves it alone.
+      const y = hips.bone.position.y;
+      if (y !== hips.written) {
+        hips.written = y * hips.k;
+        hips.bone.position.y = hips.written;
+      }
+    }
     if (a.prop !== propShown.current) {
       propShown.current = a.prop;
       for (const [k, o] of Object.entries(propKids.current)) if (o) o.visible = k === a.prop;
@@ -234,6 +327,11 @@ export function ModelCharacter({
       }}
     >
       <primitive object={scene} />
+      {hat && (
+        <Suspense fallback={null}>
+          <Cap color={hat} scene={scene} root={root} />
+        </Suspense>
+      )}
       <primitive object={propRoot}>
         {(['mug', 'phone', 'can', 'paddle', 'soda'] as const).map((p) => (
           <group

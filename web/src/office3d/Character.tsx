@@ -1,6 +1,6 @@
 import { useTexture } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { Component, Suspense, useMemo, useRef, type ReactNode } from 'react';
 import * as THREE from 'three';
 import type { Agent, Pose, Prop } from './director.ts';
 import type { Style } from './characters.ts';
@@ -260,6 +260,17 @@ function Hair({ style }: { style: Style }) {
   }
 }
 
+/** A role without a portrait yet (just added, still drawing) gets a blank face, not a broken office. */
+class FaceBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
 /** The portrait's face on the front of the head. */
 function Face({ url }: { url: string }) {
   const tex = useTexture(url);
@@ -400,7 +411,11 @@ export function Character({ agent, style, portrait, onClick, onHover }: { agent:
             </mesh>
             <group position={[0, 0.16, 0]}>
               <Hair style={style} />
-              <Face url={portrait} />
+              <FaceBoundary key={portrait}>
+                <Suspense fallback={null}>
+                  <Face url={portrait} />
+                </Suspense>
+              </FaceBoundary>
             </group>
             <group ref={headset} position={[0, 0.16, 0]} visible={false}>
               <mesh rotation={[0, 0, 0]}>

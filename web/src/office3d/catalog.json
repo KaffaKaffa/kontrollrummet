@@ -32,7 +32,31 @@
     { "id": "ws_devops", "depth": 0.68, "tier": "hero", "fit": "width", "size": 1.4, "prompt": "Desk setup: three monitors showing dashboards with graphs and green status lights, a keyboard and a small server rack with blinking lights." },
     { "id": "ws_docs", "depth": 0.68, "tier": "hero", "fit": "width", "size": 1.1, "prompt": "Desk setup: neat stacks of books, an open notebook, a laptop and a green banker's reading lamp." },
     { "id": "ws_lead", "depth": 0.75, "tier": "hero", "fit": "width", "size": 1.2, "prompt": "Desk setup: an open laptop, a headset on a headset stand, a clipboard with a checklist and a small team photo frame." },
-    { "id": "ws_fullstack", "depth": 0.68, "tier": "hero", "fit": "width", "size": 1.2, "prompt": "Desk setup: a laptop next to an external monitor showing code, two coffee mugs and a rubber duck." }
+    { "id": "ws_fullstack", "depth": 0.68, "tier": "hero", "fit": "width", "size": 1.2, "prompt": "Desk setup: a laptop next to an external monitor showing code, two coffee mugs and a rubber duck." },
+    { "id": "xmas_bench", "dims": [1.5, 0.77, 0.78], "tier": "hero", "fit": "width", "size": 1.5, "prompt": "Sturdy old toymaker's workbench of worn honey-coloured pine with thick chunky legs, a lower shelf holding a few wooden toys and a coil of red ribbon, a vise on one corner, empty top." },
+    { "id": "xmas_lead_bench", "dims": [1.8, 0.77, 0.85], "tier": "hero", "fit": "width", "size": 1.9, "prompt": "Santa's large carved dark oak desk with red painted panels and small gold stars, sturdy turned legs, empty top." },
+    { "id": "xmas_chair", "tier": "hero", "fit": "height", "size": 1.0, "prompt": "Rustic wooden workshop chair with a carved heart in the backrest, spindle back and a red checked cushion on the seat, facing forward." },
+    { "id": "xmas_tree", "tier": "hero", "fit": "height", "size": 1.9, "prompt": "Full Christmas spruce tree in a wooden tub, decorated with red apples, straw ornaments, small Swedish flags garland, warm glowing candle lights and a gold star on top." },
+    { "id": "xmas_tree_small", "tier": "basic", "fit": "height", "size": 1.4, "prompt": "Small Christmas spruce tree in a red painted wooden bucket, with red baubles and warm string lights." },
+    { "id": "xmas_poinsettia", "tier": "basic", "fit": "height", "size": 0.6, "prompt": "Red poinsettia christmas star plant in a woven basket pot with a red ribbon." },
+    { "id": "xmas_toyshelf", "dims": [0.95, 1.9, 0.36], "tier": "hero", "fit": "height", "size": 1.9, "prompt": "Tall open wooden shelf full of finished toys: painted wooden horses, toy trains, dolls, teddy bears, drums and wrapped presents." },
+    { "id": "xmas_kitchen", "dims": [2.6, 2.05, 0.62], "tier": "basic", "fit": "width", "size": 2.6, "prompt": "Rustic Scandinavian workshop kitchen counter with red painted wooden cabinets, a butcher block top, plates of gingerbread cookies, a shelf of jars and copper pots." },
+    { "id": "xmas_glogg", "tier": "hero", "fit": "height", "size": 0.5, "prompt": "Big copper kettle of steaming mulled wine (glögg) on a small cast iron stove, with a few red enamel mugs beside it." },
+    { "id": "xmas_pantry", "dims": [0.7, 1.8, 0.68], "tier": "basic", "fit": "height", "size": 1.8, "prompt": "Tall rustic wooden pantry cupboard painted dark red with folk art flowers and a closed door." },
+    { "id": "xmas_fireplace", "tier": "hero", "fit": "height", "size": 1.3, "prompt": "Cozy whitewashed brick fireplace with a crackling fire, a wooden mantel with candles and spruce garland, and red stockings hanging from it." },
+    { "id": "xmas_sofa", "dims": [2.2, 0.85, 0.95], "tier": "hero", "fit": "width", "size": 2.4, "prompt": "Cozy old wooden settle sofa with red and white checked cushions and a knitted wool blanket over the armrest." },
+    { "id": "xmas_presents", "dims": [1.0, 0.42, 0.6], "tier": "basic", "fit": "width", "size": 1.1, "prompt": "Low pile of wrapped Christmas presents in red, green and gold paper with ribbons and bows." },
+    { "id": "xmas_armchair", "tier": "hero", "fit": "width", "size": 0.9, "prompt": "Santa's big red velvet wingback armchair with carved wooden feet and a sheepskin over the seat." },
+    { "id": "xmas_lantern", "tier": "basic", "fit": "height", "size": 1.6, "prompt": "Tall black iron lantern post with a warm glowing candle inside and a spruce garland with a red bow." },
+    { "id": "xmas_sack", "tier": "basic", "fit": "width", "size": 0.9, "prompt": "Big soft brown burlap sack full of presents, tied with a red rope, slumped on the floor." },
+    { "id": "xmas_wishlist", "tier": "hero", "fit": "width", "size": 2.0, "prompt": "Large wooden board on a wooden easel stand with a very long handwritten wish list scroll pinned to it, children's drawings and a map with red pins." },
+    { "id": "xmas_basket", "tier": "basic", "fit": "height", "size": 0.4, "prompt": "Round woven wicker basket with a few crumpled pieces of red wrapping paper inside." },
+    { "id": "xmas_luva", "tier": "hero", "fit": "height", "size": 0.35, "prompt": "A single soft knitted pointed Christmas elf hat (nisse cap) in plain pure white wool, no pompom, the long tip flopping over to one side, open at the bottom, empty, not worn." },
+    { "id": "xmas_ws_lead", "depth": 0.75, "tier": "hero", "fit": "width", "size": 1.2, "prompt": "Desk setup: a huge open leather-bound book of names with a feather quill and ink pot, reading glasses, a brass candle holder with a lit candle and a small globe." },
+    { "id": "xmas_ws_toys", "depth": 0.68, "tier": "hero", "fit": "width", "size": 1.2, "prompt": "Desk setup: a half-built wooden toy train, a small hammer, a hand saw, chisels, wood shavings and a pot of glue." },
+    { "id": "xmas_ws_paint", "depth": 0.68, "tier": "hero", "fit": "width", "size": 1.2, "prompt": "Desk setup: wooden Dala horses being painted, small pots of red, blue and green paint, brushes in a jar and a painted wooden doll." },
+    { "id": "xmas_ws_wrap", "depth": 0.68, "tier": "hero", "fit": "width", "size": 1.3, "prompt": "Desk setup: a big roll of red Christmas wrapping paper, spools of ribbon, scissors, tape, and a few half-wrapped presents with gift tags." },
+    { "id": "xmas_ws_laptop", "depth": 0.68, "tier": "hero", "fit": "width", "size": 1.2, "prompt": "Desk setup: an open laptop with a knitted wool cover, a red mug of hot cocoa with marshmallows, a plate of gingerbread and a small candle." }
   ],
   "art": [
     { "id": "art_abstract", "prompt": "Abstract mid-century modern art print with overlapping warm circles and arches in terracotta, mustard and sage." },
@@ -40,6 +64,10 @@
     { "id": "art_botanical", "prompt": "Vintage botanical illustration of monstera and fern leaves on cream paper." },
     { "id": "art_waves", "prompt": "Japanese-inspired minimalist print of stylised ocean waves in blues and cream." },
     { "id": "art_city", "prompt": "Isometric illustration of a cosy little pastel city with tiny trees, cheerful and calm, no text." },
-    { "id": "art_mountains", "prompt": "Minimal landscape print of layered mountains at sunset in peach, lilac and navy." }
+    { "id": "art_mountains", "prompt": "Minimal landscape print of layered mountains at sunset in peach, lilac and navy." },
+    { "id": "xmas_art_village", "prompt": "Naive folk art painting of a snowy Swedish village at night with red cottages, lit windows and a starry sky." },
+    { "id": "xmas_art_tomte", "prompt": "Vintage Swedish Christmas card illustration of a small tomte with a lantern feeding a horse in a snowy barn, soft muted colours." },
+    { "id": "xmas_art_dala", "prompt": "Folk art pattern of red Dala horses, hearts and stars on cream, Scandinavian Christmas style." },
+    { "id": "xmas_art_forest", "prompt": "Watercolour of a snowy spruce forest at dusk with a fox and a warm glowing window in the distance." }
   ]
 }

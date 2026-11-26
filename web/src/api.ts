@@ -133,6 +133,8 @@ export interface Team {
   disabledSkills: string[];
   /** Most agents at once in this project; null: no limit. */
   maxAgents: number | null;
+  /** How Kontoret 3D looks: 'kontor' or 'verkstad' (office3d/themes.ts). */
+  office: string;
   teamPrompt: string;
   hasReleases: boolean;
   /** The people in the project: who merges, decides, reviews. */
@@ -466,7 +468,7 @@ function reduce(board: Board, action: Action): Board {
         ),
         usage: action.state.usage && !('seenAt' in action.state.usage) ? action.state.usage : {},
         pausedUntil: action.state.pausedUntil && typeof action.state.pausedUntil === 'object' ? action.state.pausedUntil : {},
-        teams: action.state.teams.map((t) => ({ ...t, mcpServers: t.mcpServers ?? [], repos: t.repos ?? [], azure: t.azure ?? false, azureConfigDir: t.azureConfigDir ?? null, azurePortalConfigDir: t.azurePortalConfigDir ?? null, infraItems: t.infraItems ?? [], monitorEveryMinutes: t.monitorEveryMinutes ?? 30, disabledSkills: t.disabledSkills ?? [], maxAgents: t.maxAgents ?? null, roles: t.roles.map((r) => ({ ...r, mcp: r.mcp ?? [], repos: r.repos ?? [] })) })),
+        teams: action.state.teams.map((t) => ({ ...t, mcpServers: t.mcpServers ?? [], repos: t.repos ?? [], azure: t.azure ?? false, azureConfigDir: t.azureConfigDir ?? null, azurePortalConfigDir: t.azurePortalConfigDir ?? null, infraItems: t.infraItems ?? [], monitorEveryMinutes: t.monitorEveryMinutes ?? 30, disabledSkills: t.disabledSkills ?? [], maxAgents: t.maxAgents ?? null, office: t.office ?? 'kontor', roles: t.roles.map((r) => ({ ...r, mcp: r.mcp ?? [], repos: r.repos ?? [] })) })),
       };
     case 'task':
       // A renamed task keeps its place; a new one goes first.

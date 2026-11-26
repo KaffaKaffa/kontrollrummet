@@ -3503,6 +3503,12 @@ main:has(.office-layout) {
   margin: 0;
 }
 
+.office-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
 .consultant-faces {
   display: flex;
   align-items: center;

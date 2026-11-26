@@ -277,6 +277,8 @@ export function saveTeamSettings(
     disabledSkills?: string[];
     /** Most agents at once for this project; null or 0: no limit. */
     maxAgents?: number | null;
+    /** Kontoret 3D's look: 'kontor' or 'verkstad'. */
+    office?: string;
     people?: unknown;
     /** The local development environments, already checked (roles.ts cleanDevApps). */
     devApps?: DevApp[];
@@ -306,6 +308,11 @@ export function saveTeamSettings(
     const cap = cleanCap(input.maxAgents);
     if (cap !== null) local.maxAgents = cap;
     else delete local.maxAgents;
+  }
+  // A look for this machine only: team.local.json.
+  if (input.office !== undefined) {
+    if (input.office === 'verkstad') local.office = 'verkstad';
+    else delete local.office;
   }
   // The people in the project are everyone's: team.json.
   if (input.people !== undefined) {

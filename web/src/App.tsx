@@ -1,7 +1,7 @@
 import { ConsultantDesk, ConsultantFaces, ConsultantPanel } from './consultants.tsx';
 import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { DevAppButtons } from './devapps.tsx';
-import { awaitsReview, calledOr, nameOf, reviewText, post, useBoard, type Account, type Board, type Notice, type OwnPr, type Plan, type PlanStatus, type Role, type Subtask, type Team, type Usage } from './api.ts';
+import { awaitsReview, calledOr, nameOf, reviewText, post, put, useBoard, type Account, type Board, type Notice, type OwnPr, type Plan, type PlanStatus, type Role, type Subtask, type Team, type Usage } from './api.ts';
 import { Markdown } from './markdown.tsx';
 import { Linked, linkify } from './links.tsx';
 import { lineSettled } from '../../server/notice-refs.ts';
@@ -12,6 +12,7 @@ import { Logo, NewProjectGuide, ProjectSettings } from './project.tsx';
 import { Releases } from './releases.tsx';
 import { AppSettings } from './limits.tsx';
 import type { Director, Duty } from './office3d/director.ts';
+import { OFFICE_THEMES } from './office3d/themes.ts';
 import { doing, useLifeTick, useOfficeLife } from './office3d/life.ts';
 import { ThemeToggle } from './theme.tsx';
 import { NotifyToggle, useSystemNotifications } from './notify.tsx';
@@ -906,6 +907,7 @@ function Office({
       <div className="office-main">
         <div className="office-bar">
           {mode === '3d' ? <ConsultantFaces list={board.consultants[board.team.id] ?? []} team={board.team.id} consultations={board.consultations} /> : <span />}
+        <div className="office-tools">
         <div className="segmented office-mode" role="tablist" aria-label="Visa kontoret som">
           <button type="button" role="tab" aria-selected={mode === 'desks'} onClick={() => setMode('desks')}>
             Skrivbord
@@ -914,12 +916,25 @@ function Office({
             Kontoret 3D
           </button>
         </div>
+        {mode === '3d' && (
+          <label className="select">
+            <select aria-label="Hur kontoret ser ut" value={board.team.office} onChange={(e) => void put(`/api/teams/${board.team.id}/settings`, { office: e.target.value })}>
+              {OFFICE_THEMES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        </div>
         </div>
         {mode === '3d' ? (
           <Suspense fallback={<p className="empty">Bygger kontoret…</p>}>
             <Office3D
               director={life}
               team={board.team.id}
+              theme={board.team.office}
               roles={board.roles}
               subtasks={board.subtasks}
               tasks={board.tasks}

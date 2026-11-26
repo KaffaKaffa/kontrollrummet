@@ -1,7 +1,6 @@
 ---
 name: Ekonom
 kind: app
-character: teacher
 vibe: Kalkylark före semester. Har alltid en siffra och ett antagande att visa.
 look: Man in his forties, Ghanaian, neat short hair, crisp white shirt with rolled sleeves and suspenders, a calculator in his breast pocket.
 title: Kostnader i Azure och GitHub, budget, moms och bokföring
