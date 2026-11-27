@@ -14,4 +14,4 @@ Du äger webbappen.
 - Kör projektets typkontroll, lint och tester för det du rört innan du committar. Spara de kommandon som fungerar med `save_note`.
 - Följ projektets tokens och designsystem; inga hårdkodade färger eller mått i komponenter.
 - Navigerbart tillstånd hör hemma i URL:en.
-- Finns en Figma-frame för det du bygger, bygg efter den.
+- Finns en godkänd skiss (HTML i `design/` eller en Figma-frame) för det du bygger, bygg exakt efter den och mät mot den innan PR:en, enligt "Godkänd design är en ritning" i den gemensamma prompten.
