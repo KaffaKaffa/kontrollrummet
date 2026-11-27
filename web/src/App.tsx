@@ -1211,9 +1211,25 @@ export function App() {
     void (total > 0 ? nav.setAppBadge?.(total) : nav.clearAppBadge?.())?.catch(() => undefined);
   }, [total]);
 
+  // The top bar is two rows and grows when it wraps: the views below it size to its real height.
+  const topbar = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = topbar.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const set = () => root.style.setProperty('--topbar-height', `${el.getBoundingClientRect().height}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty('--topbar-height');
+    };
+  }, []);
+
   return (
     <div className="shell">
-      <header className="topbar">
+      <header className="topbar" ref={topbar}>
         <div className="topbar-row">
         <h1 className="wordmark">
           <span className="wordmark-short">K</span>
