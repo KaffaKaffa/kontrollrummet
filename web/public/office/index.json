@@ -32,7 +32,31 @@
     "ws_docs",
     "ws_lead",
     "ws_fullstack",
-    "pingpong_table"
+    "pingpong_table",
+    "xmas_bench",
+    "xmas_lead_bench",
+    "xmas_chair",
+    "xmas_tree",
+    "xmas_tree_small",
+    "xmas_poinsettia",
+    "xmas_toyshelf",
+    "xmas_kitchen",
+    "xmas_glogg",
+    "xmas_pantry",
+    "xmas_fireplace",
+    "xmas_sofa",
+    "xmas_presents",
+    "xmas_armchair",
+    "xmas_lantern",
+    "xmas_sack",
+    "xmas_wishlist",
+    "xmas_basket",
+    "xmas_luva",
+    "xmas_ws_lead",
+    "xmas_ws_toys",
+    "xmas_ws_paint",
+    "xmas_ws_wrap",
+    "xmas_ws_laptop"
   ],
   "art": [
     "art_abstract",
@@ -40,6 +64,10 @@
     "art_city",
     "art_mountains",
     "art_rocket",
-    "art_waves"
+    "art_waves",
+    "xmas_art_dala",
+    "xmas_art_forest",
+    "xmas_art_tomte",
+    "xmas_art_village"
   ]
 }

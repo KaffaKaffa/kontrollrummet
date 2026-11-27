@@ -48,15 +48,51 @@ export function classifyFoundryError(text: string, deployment: string): string {
   return `Oväntat fel: ${text.trim().split('\n').find(Boolean)?.slice(0, 200) ?? 'inget svar'}`;
 }
 
-function probe(id: string, tier: Tier, deployment: string, own: boolean): Promise<TierResult> {
+/**
+ * One quick HTTP call before claude is started: claude retries DNS and 401 errors
+ * silently until its timeout. Returns an error message, or null when the call got through
+ * (or could not be judged here).
+ */
+async function preflight(id: string, deployment: string): Promise<string | null> {
+  const a = getAccount(id);
+  const f = a.foundry!;
+  if (f.auth !== 'key') return null;
+  const env = accountEnv(id);
+  const base = (env.ANTHROPIC_FOUNDRY_BASE_URL || (env.ANTHROPIC_FOUNDRY_RESOURCE ? `https://${env.ANTHROPIC_FOUNDRY_RESOURCE}.services.ai.azure.com/anthropic` : '')).replace(/\/+$/, '');
+  const key = env.ANTHROPIC_FOUNDRY_API_KEY;
+  if (!base || !key) return null;
+  try {
+    const res = await fetch(`${base}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key, 'api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: deployment, max_tokens: 1, messages: [{ role: 'user', content: 'OK?' }] }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 401 || res.status === 403 || res.status === 404 || res.status === 429) {
+      const body = (await res.text().catch(() => '')).slice(0, 300);
+      // A 404 from the gateway itself means the path is wrong; only trust it when it names the deployment.
+      return classifyFoundryError(`${res.status} ${body}`, deployment);
+    }
+    return null;
+  } catch (e) {
+    const cause = (e as { cause?: { code?: string; message?: string } }).cause;
+    const text = `${cause?.code ?? ''} ${cause?.message ?? ''} ${(e as Error).message}`;
+    if ((e as Error).name === 'TimeoutError') return 'Inget svar på 10 sekunder. Resursen svarar inte.';
+    return classifyFoundryError(text, deployment);
+  }
+}
+
+async function probe(id: string, tier: Tier, deployment: string, own: boolean): Promise<TierResult> {
   const started = Date.now();
+  const early = await preflight(id, deployment);
+  if (early) return { tier, deployment, own, ok: false, ms: Date.now() - started, message: early };
   return new Promise((resolve) => {
     const done = (ok: boolean, message: string) => resolve({ tier, deployment, own, ok, ms: Date.now() - started, message });
     // The cheapest question there is: no tools, no MCP servers, a one-line system prompt.
     execFile(
       CLAUDE_BIN,
       ['-p', 'OK?', '--model', tier, '--output-format', 'json', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--tools', '', '--system-prompt', 'Svara med OK.', '--no-session-persistence'],
-      { env: accountEnv(id), timeout: 60_000, maxBuffer: 4_000_000 },
+      { env: { ...accountEnv(id), CLAUDE_CODE_MAX_RETRIES: '0', ANTHROPIC_MAX_RETRIES: '0' }, timeout: 30_000, maxBuffer: 4_000_000 },
       (err, stdout, stderr) => {
         const out = String(stdout);
         let parsed: { is_error?: boolean; result?: string; modelUsage?: Record<string, unknown> } | null = null;
@@ -66,7 +102,7 @@ function probe(id: string, tier: Tier, deployment: string, own: boolean): Promis
           // Not JSON: the error text is in stderr.
         }
         if (!err && parsed && !parsed.is_error) return done(true, `Svarade (${Object.keys(parsed.modelUsage ?? {})[0] ?? deployment})`);
-        if (err && (err as { killed?: boolean }).killed) return done(false, 'Inget svar på 60 sekunder. Resursen svarar inte.');
+        if (err && (err as { killed?: boolean }).killed) return done(false, 'Inget svar på 30 sekunder. Resursen svarar inte.');
         done(false, classifyFoundryError(`${parsed?.result ?? ''}\n${String(stderr)}\n${out}`, deployment));
       },
     );

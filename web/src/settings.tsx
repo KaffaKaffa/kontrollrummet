@@ -246,6 +246,16 @@ export function AgentSettings({ team, role, onClose }: { team: Team; role: Role;
                 ))}
               </select>
             </label>
+            {draft.kind === 'designer' && (
+              <label className="field">
+                <span>Arbetssätt</span>
+                <select value={draft.medium ?? 'figma'} onChange={(e) => set('medium', e.target.value as 'figma' | 'html')}>
+                  <option value="figma">Figma</option>
+                  <option value="html">HTML med tokens</option>
+                </select>
+                <small>Styr verktyg och instruktioner: Figma, eller HTML-sidor med projektets tokens som granskas via skärmdumpar.</small>
+              </label>
+            )}
           </div>
           <div className="form-row">
             <label className="field">

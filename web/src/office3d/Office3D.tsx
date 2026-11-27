@@ -12,6 +12,7 @@ import type { Agent, Director } from './director.ts';
 import { PINGIS } from './life.ts';
 import { buildLayout, coffeeTable, type Layout } from './layout.ts';
 import { Bin, Chair, Desk, Floor, FridgeDoor, Kitchen, PingPong, Plant, Sofa, TestBench, Walls, Whiteboard } from './props.tsx';
+import { themeOf, type Theme } from './themes.ts';
 
 /**
  * Kontoret i 3D: the team at its desks, seen from above like a diorama. Who
@@ -29,6 +30,8 @@ export interface Office3DProps {
   approvals: Approval[];
   onOpenCard: (id: number) => void;
   onOpenAgent: (roleId: string) => void;
+  /** The project's look (themes.ts): the office, or the Christmas workshop. */
+  theme?: string;
 }
 
 const DUTY_TEXT: Record<string, string> = {
@@ -213,18 +216,21 @@ function useBuiltCharacters(): Set<string> {
   return built;
 }
 
-function Person({ director, id, team, built, onOpen }: { director: Director; id: string; team: string; built: Set<string>; onOpen: (a: Agent) => void }) {
+function Person({ director, id, team, built, onOpen, theme, index, caps }: { director: Director; id: string; team: string; built: Set<string>; onOpen: (a: Agent) => void; theme: Theme; index: number; caps: boolean }) {
   const [hovered, setHovered] = useState(false);
   const get = () => director.agents.get(id)!;
   const a = get();
-  const character = characterOf(a.role);
+  // The theme's character once it is built (a nisse, Santa); until then the role's own.
+  const themed = theme.character(a.role, index);
+  const character = themed && built.has(themed) ? themed : characterOf(a.role);
+  const hat = themed && character === themed && caps ? theme.hat(a.role, index) : null;
   const clay = <Character agent={get} style={styleOf(a.role)} portrait={avatarUrl(team, a.role)} onClick={() => onOpen(get())} onHover={setHovered} />;
   return (
     <>
       {built.has(character) ? (
         <ModelBoundary fallback={clay}>
           <Suspense fallback={clay}>
-            <ModelCharacter character={character} agent={get} onClick={() => onOpen(get())} onHover={setHovered} />
+            <ModelCharacter character={character} agent={get} hat={hat} onClick={() => onOpen(get())} onHover={setHovered} />
           </Suspense>
         </ModelBoundary>
       ) : (
@@ -273,6 +279,15 @@ export default function Office3D(props: Office3DProps) {
 
   const built = useBuiltCharacters();
   const office = useOfficeIndex();
+  const theme = themeOf(props.theme);
+  /** The theme's model for an office piece, once it is built; otherwise the office's own. */
+  const m = (id: string) => {
+    const t = theme.models[id];
+    return t && office.props.has(t) ? t : id;
+  };
+  const art = office.art.filter(theme.art);
+  // Nisses count from the first non-lead, so the two kinds and the cap colours take turns.
+  const crew = roles.filter((r) => r.kind !== 'lead').map((r) => r.id);
   const open = (a: Agent) => (a.card ? props.onOpenCard(a.card.id) : props.onOpenAgent(a.id));
   const cx = (layout.minX + layout.maxX) / 2;
   const cz = (layout.minZ + layout.maxZ) / 2;
@@ -291,17 +306,18 @@ export default function Office3D(props: Office3DProps) {
         camera={{ fov: 32, near: 0.1, far: 200 }}
         gl={{ antialias: false, toneMapping: THREE.ACESFilmicToneMapping }}
       >
-        <color attach="background" args={['#f4ede4']} />
-        <fog attach="fog" args={['#f4ede4', 30, 70]} />
+        <color attach="background" args={[theme.sky]} />
+        <fog attach="fog" args={[theme.sky, 30, 70]} />
         <FitCamera layout={layout} />
         <Lights layout={layout} />
         <Suspense fallback={null}>
-          <Floor layout={layout} />
-          <Walls layout={layout} />
+          <Floor layout={layout} colors={theme.colors} />
+          <Walls layout={layout} colors={theme.colors} />
           {[...layout.desks.values()].map((d) => {
             const role = roles.find((r) => r.id === d.roleId);
-            const ws = role ? workstationOf(jobOf(role), role.kind) : '';
-            const deskModel = d.kind === 'lead' ? 'lead_desk' : 'desk';
+            const themedWs = role ? theme.workstation(jobOf(role), role.kind) : null;
+            const ws = themedWs && office.props.has(themedWs) ? themedWs : role ? workstationOf(jobOf(role), role.kind) : '';
+            const deskModel = m(d.kind === 'lead' ? 'lead_desk' : 'desk');
             return (
             <group key={d.roleId}>
               <Desk
@@ -317,7 +333,7 @@ export default function Office3D(props: Office3DProps) {
               {office.props.has(ws) && <Asset model={ws} index={office} position={[d.desk[0], 0.77, d.desk[1]]} rotation={[0, d.face + Math.PI, 0]} />}
               <Chair
                 lead={d.kind === 'lead'}
-                model={office.props.has('office_chair') ? <Asset model="office_chair" index={office} /> : undefined}
+                model={office.props.has(m('office_chair')) ? <Asset model={m('office_chair')} index={office} /> : undefined}
                 pose={() => {
                   const a = director.agents.get(d.roleId);
                   // The chair goes with its sitter, and stays pushed out when they are away.
@@ -330,12 +346,12 @@ export default function Office3D(props: Office3DProps) {
             );
           })}
           {layout.bins.map((b, i) => (
-            <Asset key={i} model="bin" index={office} position={[b[0], 0, b[1]]} fallback={<Bin at={[0, 0]} />} />
+            <Asset key={i} model={m('bin')} index={office} position={[b[0], 0, b[1]]} fallback={<Bin at={[0, 0]} />} />
           ))}
           {layout.plants.map((p, i) => (
             <Asset
               key={i}
-              model={['plant_monstera', 'plant_fiddle', 'plant_snake'][i % 3]}
+              model={m(['plant_monstera', 'plant_fiddle', 'plant_snake'][i % 3])}
               index={office}
               position={[p.at[0], 0, p.at[1]]}
               fallback={<Plant at={[0, 0]} size={i === 0 ? 1.2 : 1} />}
@@ -344,43 +360,43 @@ export default function Office3D(props: Office3DProps) {
           <PingPong layout={layout} ball={pingBall} />
           {office.props.has('kitchen') ? (
             <>
-              <Asset model="kitchen" index={office} position={[layout.coffee.machine.at[0] - 0.7, 0, layout.coffee.machine.at[1] - 0.55]} />
-              <Asset model="coffee_machine" index={office} position={[layout.coffee.machine.at[0], 0.92, layout.coffee.machine.at[1] - 0.6]} />
+              <Asset model={m('kitchen')} index={office} position={[layout.coffee.machine.at[0] - 0.7, 0, layout.coffee.machine.at[1] - 0.55]} />
+              <Asset model={m('coffee_machine')} index={office} position={[layout.coffee.machine.at[0], 0.92, layout.coffee.machine.at[1] - 0.6]} />
             </>
           ) : (
             <Kitchen layout={layout} />
           )}
           {office.props.has('sofa') ? (
             <>
-              <Asset model="sofa" index={office} position={[layout.sofa.at[0], 0, layout.sofa.at[1]]} rotation={[0, layout.sofa.face, 0]} />
-              <Asset model="coffee_table" index={office} position={[coffeeTable(layout)[0], 0, coffeeTable(layout)[1]]} />
+              <Asset model={m('sofa')} index={office} position={[layout.sofa.at[0], 0, layout.sofa.at[1]]} rotation={[0, layout.sofa.face, 0]} />
+              <Asset model={m('coffee_table')} index={office} position={[coffeeTable(layout)[0], 0, coffeeTable(layout)[1]]} />
             </>
           ) : (
             <Sofa layout={layout} />
           )}
           {office.props.has('whiteboard') ? (
-            <Asset model="whiteboard" index={office} position={[layout.whiteboard.at[0], 0, layout.whiteboard.at[1] + 0.35]} />
+            <Asset model={m('whiteboard')} index={office} position={[layout.whiteboard.at[0], 0, layout.whiteboard.at[1] + 0.35]} />
           ) : (
             <Whiteboard layout={layout} />
           )}
           <TestBench layout={layout} />
           {/* Furniture that is only there to look at, once it is made. */}
-          <Asset model="bookshelf" index={office} position={[layout.decor.bookshelf.at[0], 0, layout.decor.bookshelf.at[1]]} rotation={[0, layout.decor.bookshelf.face, 0]} />
-          <Asset model="fridge" index={office} position={[layout.decor.fridge.at[0], 0, layout.decor.fridge.at[1]]} rotation={[0, layout.decor.fridge.face, 0]} />
-          <FridgeDoor at={layout.decor.fridge.at} face={layout.decor.fridge.face} open={() => [...director.agents.values()].some((a) => a.activity === 'fridge' && !a.path.length)} />
-          <Asset model="water_cooler" index={office} position={[layout.decor.waterCooler.at[0], 0, layout.decor.waterCooler.at[1]]} rotation={[0, layout.decor.waterCooler.face, 0]} />
-          <Asset model="armchair" index={office} position={[layout.decor.armchair.at[0], 0, layout.decor.armchair.at[1]]} rotation={[0, layout.decor.armchair.face, 0]} />
-          <Asset model="floor_lamp" index={office} position={[layout.decor.floorLamp.at[0], 0, layout.decor.floorLamp.at[1]]} rotation={[0, layout.decor.floorLamp.face, 0]} />
+          <Asset model={m('bookshelf')} index={office} position={[layout.decor.bookshelf.at[0], 0, layout.decor.bookshelf.at[1]]} rotation={[0, layout.decor.bookshelf.face, 0]} />
+          <Asset model={m('fridge')} index={office} position={[layout.decor.fridge.at[0], 0, layout.decor.fridge.at[1]]} rotation={[0, layout.decor.fridge.face, 0]} />
+          <FridgeDoor color={theme.fridgeDoor} at={layout.decor.fridge.at} face={layout.decor.fridge.face} open={() => [...director.agents.values()].some((a) => a.activity === 'fridge' && !a.path.length)} />
+          <Asset model={m('water_cooler')} index={office} position={[layout.decor.waterCooler.at[0], 0, layout.decor.waterCooler.at[1]]} rotation={[0, layout.decor.waterCooler.face, 0]} />
+          <Asset model={m('armchair')} index={office} position={[layout.decor.armchair.at[0], 0, layout.decor.armchair.at[1]]} rotation={[0, layout.decor.armchair.face, 0]} />
+          <Asset model={m('floor_lamp')} index={office} position={[layout.decor.floorLamp.at[0], 0, layout.decor.floorLamp.at[1]]} rotation={[0, layout.decor.floorLamp.face, 0]} />
           {layout.decor.beanbags.map((b, i) => (
-            <Asset key={i} model="bean_bag" index={office} position={[b.at[0], 0, b.at[1]]} rotation={[0, b.face, 0]} />
+            <Asset key={i} model={m('bean_bag')} index={office} position={[b.at[0], 0, b.at[1]]} rotation={[0, b.face, 0]} />
           ))}
-          {office.art.length > 0 &&
+          {art.length > 0 &&
             layout.art.map((slot, i) => (
-              <Artwork key={i} art={office.art[i % office.art.length]} position={[slot.x, 1.7, slot.z + 0.03]} width={i % 2 ? 0.75 : 0.95} />
+              <Artwork key={i} art={art[i % art.length]} position={[slot.x, 1.7, slot.z + 0.03]} width={i % 2 ? 0.75 : 0.95} />
             ))}
           <PaperBalls director={director} />
           {roles.map((r) => (
-            <Person key={r.id} director={director} id={r.id} team={team} built={built} onOpen={open} />
+            <Person key={r.id} director={director} id={r.id} team={team} built={built} onOpen={open} theme={theme} index={Math.max(0, crew.indexOf(r.id))} caps={office.props.has('xmas_luva')} />
           ))}
         </Suspense>
         <OrbitControls
