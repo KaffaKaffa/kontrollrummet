@@ -124,7 +124,7 @@ const github: GitProvider = {
   label: 'GitHub',
   cli: 'gh',
   prUrl: /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/(\d+)/g,
-  prHow: 'Öppna en PR mot basbranchen med `gh pr create`.',
+  prHow: 'Öppna en PR mot basbranchen med `gh pr create --draft`. Den görs klar med `gh pr ready <nummer>` först när testaren har godkänt den (testaren gör det när testet gått igenom utan fel). Ändrar PR:en inget som går att köra får den öppnas utan --draft.',
   async prState(prUrl, repo, account) {
     const out = await exec('gh', ['pr', 'view', prUrl, '--json', 'state,mergeable,mergeStateStatus,reviewDecision,reviewRequests,latestReviews'], identityEnv(account), repo);
     const pr = JSON.parse(out) as GhReviewFields & { state: string; mergeable: string };
@@ -238,7 +238,7 @@ const azure: GitProvider = {
   label: 'Azure DevOps',
   cli: 'az',
   prUrl: /https:\/\/(?:dev\.azure\.com\/[^/\s]+|[\w-]+\.visualstudio\.com)\/[^/\s]+\/_git\/[^/\s]+\/pullrequest\/(\d+)/g,
-  prHow: 'Öppna en PR mot basbranchen med `az repos pr create --source-branch <din branch> --target-branch <basbranch> --title … --description …` (aldrig med `--auto-complete`), och skriv PR-länken på en egen rad.',
+  prHow: 'Öppna en PR mot basbranchen med `az repos pr create --source-branch <din branch> --target-branch <basbranch> --title … --description … --draft true` (aldrig med `--auto-complete`; draft tills testaren godkänt, och testaren gör den klar med `az repos pr update --id <id> --draft false`; ändrar PR:en inget som går att köra får den öppnas utan --draft), och skriv PR-länken på en egen rad.',
   async prState(prUrl, repo, account) {
     const id = /pullrequest\/(\d+)/.exec(prUrl)?.[1];
     if (!id) throw new Error('ingen PR i länken');
