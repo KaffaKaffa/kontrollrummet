@@ -4429,3 +4429,233 @@ button.link-chip {
 .topbar .topbar-sub:empty {
   display: none;
 }
+
+/* ------------------------------------------------------------ top bar: the approved sketch, value for value
+   design/toppmeny.html is the source. Every size, radius, weight and colour below is taken from it;
+   change the sketch first if the bar should look different. */
+.topbar {
+  background: var(--color-bg-raised);
+  backdrop-filter: none;
+}
+
+.topbar .topbar-row,
+.topbar .topbar-sub,
+.team-menu-list {
+  line-height: 1.4;
+}
+
+.topbar .topbar-row,
+.topbar .topbar-sub {
+  gap: var(--space-16);
+  padding: 0 20px;
+}
+
+.topbar .topbar-row {
+  height: 56px;
+}
+
+.topbar .topbar-sub {
+  height: 44px;
+  gap: var(--space-4);
+}
+
+.topbar .wordmark {
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: normal;
+}
+
+/* The project button: a rounded rectangle, not a pill. */
+.topbar .team-menu-btn {
+  height: auto;
+  padding: 6px 10px;
+  gap: var(--space-8);
+  border: 1px solid var(--color-line-default);
+  border-radius: 8px;
+  background: var(--color-surface-2);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.topbar .team-menu-btn .team-logo,
+.team-menu-list .team-logo {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+}
+
+/* Counts: 18 px round badges, 11 px bold; on the app chips 16 px. Round, never oval. */
+.topbar .count,
+.team-menu-list .count {
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  box-sizing: border-box;
+}
+
+.topbar .devapp-chip .count {
+  min-width: 16px;
+  height: 16px;
+  font-size: 10px;
+  line-height: 16px;
+  background: var(--color-brand-fill);
+  color: var(--color-fg-on-brand);
+}
+
+.topbar .topbar-status {
+  gap: 0;
+  color: var(--color-fg-tertiary);
+  font-size: 13px;
+}
+
+.topbar .topbar-status .num {
+  font-weight: 700;
+}
+
+.topbar .topbar-status .pulse {
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+}
+
+/* Square icon buttons with rounded corners; the restart one a little smaller, no fill. */
+.topbar .icon-btn,
+.topbar .notify-toggle,
+.topbar .theme-toggle {
+  align-self: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-fg-secondary);
+}
+
+.topbar .restart-btn {
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  font-size: 16px;
+}
+
+.topbar .icon-btn:hover,
+.topbar .notify-toggle:hover,
+.topbar .theme-toggle:hover {
+  background: var(--color-surface-2);
+  color: var(--color-fg-primary);
+}
+
+.topbar .settings-link[aria-current='page'] {
+  background: var(--color-brand-tint);
+  color: var(--color-brand-text);
+  box-shadow: inset 0 0 0 1px var(--color-brand-fill);
+}
+
+.topbar .godfather-link img {
+  box-shadow: 0 0 0 1px var(--color-line-default);
+}
+
+.topbar .godfather-link[aria-current='page'] img {
+  box-shadow: 0 0 0 2px var(--color-brand-fill);
+}
+
+.topbar .godfather-link .count {
+  top: -5px;
+  right: -6px;
+  box-shadow: 0 0 0 2px var(--color-bg-raised);
+}
+
+/* The views: 14 px, the current one in brand colour with a 2 px line under the tab itself. */
+.topbar .topbar-sub .tabs {
+  align-self: center;
+  gap: var(--space-4);
+}
+
+.topbar .tabs a {
+  gap: 6px;
+  padding: 6px 10px;
+  color: var(--color-fg-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.topbar .tabs a::after {
+  display: none;
+}
+
+.topbar .tabs a[aria-current='page'] {
+  color: var(--color-brand-text);
+  box-shadow: inset 0 -2px var(--color-brand-fill);
+}
+
+/* The app chips: outlined pills, 12 px, no fill; the dot says if it runs. */
+.topbar .devapp-bar {
+  gap: var(--space-4);
+}
+
+.topbar .devapp-chip {
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-line-default);
+  background: transparent;
+  color: var(--color-fg-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.topbar .devapp-chip .devapp-dot {
+  width: 7px;
+  height: 7px;
+}
+
+/* The project menu. */
+.team-menu-list {
+  top: calc(100% + 7px);
+  width: 280px;
+  padding: 6px;
+  border: 1px solid var(--color-line-default);
+  border-radius: 12px;
+  background: var(--color-bg-overlay);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.27);
+}
+
+.team-menu-list a {
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--color-fg-primary);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.team-menu-list a[aria-current='page'] {
+  background: var(--color-brand-tint);
+  box-shadow: none;
+}
+
+.team-menu-list .team-menu-new {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-line-hairline);
+  border-radius: 0 0 8px 8px;
+  color: var(--color-brand-text);
+}
+
+/* Narrow: the same spacing as wide; only the texts give way (see the 1100 px rule above). */
+@media (max-width: 1100px) {
+  .topbar .topbar-row,
+  .topbar .topbar-sub {
+    gap: var(--space-16);
+    padding: 0 20px;
+  }
+
+  .topbar .topbar-sub {
+    gap: var(--space-4);
+  }
+}
