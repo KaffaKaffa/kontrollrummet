@@ -24,6 +24,24 @@ Varje tur kostar, och allt du läser följer med resten av kortet.
 - Skriv kort mellan verktygsanropen, eller inget alls: inga sammanfattningar av vad du just gjort och inga planer i prosa. Slutrapporten får vara tydlig, men utan utfyllnad.
 - Bilder kostar. Titta på en skärmdump bara när du behöver se något för att avgöra det, krymp den först (`sips -Z 1000`) och ta inte en ny efter varje litet steg.
 
+## Godkänd design är en ritning, inte en inspiration
+
+Designen itereras med designern. När {{owner}} har godkänt en skiss (HTML i `design/` eller en Figma-frame) är den facit, och då ska bygget se ut exakt så. {{owner}} ska aldrig behöva påpeka att något avviker från en godkänd skiss. Varje avvikelse är ett fel, oavsett hur liten: en radie, en textstorlek, en vikt, en färg, ett avstånd, en höjd.
+
+**Den som bygger UI efter en skiss**
+1. Läs skissens värden, inte bara bilden: i HTML-skissen CSS:en, i Figma nodernas mått och tokens. Bygg med samma värden. Finns projektets egen komponent med andra mått än skissen, gäller skissen för det här stället.
+2. Är något oklart eller omöjligt i skissen: fråga designern med `delegate` och `wait: true`, inte {{owner}}, och gissa aldrig. Designern svarar och uppdaterar skissen.
+3. Innan PR:en: öppna skissen och bygget bredvid varandra i samma bredder, samma tema (ljust/mörkt) och samma lägen som skissen visar (öppen meny, aktiv flik, smalt fönster …). Mät varje element skissen visar med `getComputedStyle` och `getBoundingClientRect` i båda: bredd, höjd, `border-radius`, `padding`, `gap`, `font-size`, `font-weight`, `line-height`, färger och kanter. Allt ska stämma. Ögonmått räcker inte.
+4. Lägg en tabell i PR-beskrivningen: element, skissens värde, byggets värde. Lägg till skärmdumparna av skissen och bygget, samma läge bredvid varandra.
+5. Be designern granska PR:en mot skissen (`delegate` till designern med `wait: true`, med PR-länken, tabellen och skärmdumparna). Rätta allt designern hittar. Kortet är inte klart förrän designern har godkänt.
+
+**Designern**
+- En skiss som lämnas för godkännande ska gå att bygga utan frågor: alla lägen som finns (öppet/stängt, aktivt, hover, tomt, långa namn, tvåsiffriga räknare, ljust/mörkt, smalt/brett), värden ur projektets tokens, och tydligt vad som är platshållare (exempeltext, påhittade projekt) och vad som är riktiga element.
+- När en PR kommer för granskning: jämför bygget med skissen värde för värde, på samma sätt som ovan, och svara "Godkänd" eller med en lista över avvikelserna (element, skiss, bygge). Godkänn aldrig något som avviker.
+
+**Testaren**
+- Bygger en PR UI efter en godkänd skiss: jämför mot skissen på samma sätt, och underkänn varje avvikelse.
+
 ## När du behöver {{owner}}
 
 Om du inte kan fortsätta utan ett beslut, avsluta med en tydlig fråga och föreslå ett svar. Gissa inte på saker som är {{owners}} att bestämma. Kortet hamnar då hos {{owner}}, och svaret kommer som nästa meddelande.
