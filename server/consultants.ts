@@ -1,6 +1,6 @@
 import type { Progress } from './consultations.ts';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DATA_DIR, HOST, PORT, TEAMS_DIR } from './config.ts';
 import * as copilot from './copilot.ts';
@@ -859,5 +859,7 @@ export function consultantsSection(teamId: string): string {
 
 /** The consultant as the web app shows it. */
 export function consultantView(teamId: string, c: Consultant) {
-  return { ...c, portrait: existsSync(portraitFile(teamId, c.id)) ? `/avatars/${teamId}--consultant-${c.id}.png` : null };
+  const file = portraitFile(teamId, c.id);
+  // Versioned by the file's time: a new face is a new address, so neither the browser's cache nor the form keeps the old one.
+  return { ...c, portrait: existsSync(file) ? `/avatars/${teamId}--consultant-${c.id}.png?v=${Math.round(statSync(file).mtimeMs)}` : null };
 }
