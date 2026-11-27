@@ -55,7 +55,7 @@ export function planAction(id: number, action: PlanAction): Plan {
   let updated: Plan;
   if (action === 'implement') {
     if (p.status === 'implementing') throw new Error('planen genomförs redan');
-    const brief = `Genomför plan #${p.id}: ${p.title}\n\nArkitekten har tagit fram planen och ${OWNER} har valt att genomföra den. Dela ut den enligt stegen.\n\n${p.body}`;
+    const brief = `Genomför plan #${p.id}: ${p.title}\n\nArkitekten har tagit fram planen och ${OWNER} har valt att genomföra den. Dela ut den enligt stegen.\n\nUnderlaget i planen (skisser, driftkostnad, juridik och annat teamet tog fram) gällde när planen skrevs, ${p.updatedAt.slice(0, 10)}. Innan något byggs efter det: be samma roll kontrollera det mot hur systemet, priserna och reglerna ser ut nu, och uppdatera det som har ändrats. En skiss som ändras ska godkännas av ${OWNER} igen innan den byggs.\n\n${p.body}`;
     const { task } = submitTask(p.team, brief);
     updated = updatePlan(p.id, { status: 'implementing', taskId: task.id });
   } else {

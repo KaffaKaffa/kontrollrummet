@@ -469,9 +469,9 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'delegate',
-    kinds: ['app', 'designer'],
+    kinds: ['app', 'designer', 'architect'],
     description:
-      'Lämna över något som hör till en annan agent, t.ex. ett nytt API-fält till backend eller samma ändring på Android. Blir ett eget kort under samma uppgift; teamleadern ser det. Gör inte jobbet själv.',
+      'Lämna över något som hör till en annan agent, t.ex. ett nytt API-fält till backend eller samma ändring på Android. Blir ett eget kort under samma uppgift; teamleadern ser det. Gör inte jobbet själv. Arkitekten: be om underlag till planen (skisser, driftkostnad, juridik); du väntar alltid på svaret.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -484,8 +484,14 @@ const TOOLS: Tool[] = [
     },
     run: (a, ctx) => {
       const lead = leadOf(ctx.subtask.taskId, ctx.team);
-      const s = newCard(ctx, String(a.agent), String(a.brief), [], a.wait ? ctx.subtask.id : (lead?.id ?? ctx.subtask.id), a.repo ? String(a.repo) : null);
-      if (a.wait) return `Kort #${s.id} skapat åt ${whoIn(s.team, s.agent)}. Rapportera watching nu; du väcks när det är klart.`;
+      // The architect asks for input to a plan the owner has not decided on: nothing is built yet, and the answer comes back to the plan.
+      const planning = ctx.role.kind === 'architect';
+      const brief = planning
+        ? `Underlag till en plan som arkitekten tar fram (kort ${ctx.subtask.id}). ${OWNER} har inte bestämt om planen ska genomföras: ta fram det som efterfrågas, men bygg eller ändra inget i produkten. Svara med resultatet i din rapport.\n\n${String(a.brief)}`
+        : String(a.brief);
+      const wait = Boolean(a.wait) || planning;
+      const s = newCard(ctx, String(a.agent), brief, [], wait ? ctx.subtask.id : (lead?.id ?? ctx.subtask.id), a.repo ? String(a.repo) : null);
+      if (wait) return `Kort #${s.id} skapat åt ${whoIn(s.team, s.agent)}. Rapportera watching nu; du väcks när det är klart.`;
       return `Kort #${s.id} skapat åt ${whoIn(s.team, s.agent)}.${lead ? ` ${whoIn(lead.team, lead.agent)} (kort ${lead.id}) följer det.` : ''}`;
     },
   },
@@ -603,7 +609,7 @@ const TOOLS: Tool[] = [
     name: 'save_plan',
     kinds: ['architect'],
     description:
-      `Spara planen så att ${OWNER} ser den under Planer, där planen kan genomföras, parkeras eller kastas. Spara igen när du reviderat: samma plan uppdateras. body är markdown: Bakgrund, Förslag, Steg per app/roll (vem gör vad, i vilken ordning, beroenden), Risker och öppna frågor, Verifiering. Skriv för teamleadern: den ska kunna dela ut planen utan att fråga dig.`,
+      `Spara planen så att ${OWNER} ser den under Planer, där planen kan genomföras, parkeras eller kastas. Spara igen när du reviderat: samma plan uppdateras. body är markdown: Bakgrund, Förslag, Steg per app/roll (vem gör vad, i vilken ordning, beroenden), Underlag (det teamet tagit fram åt planen: skisser, driftkostnad, juridik, med kort och datum), Risker och öppna frågor, Verifiering. Skriv för teamleadern: den ska kunna dela ut planen utan att fråga dig.`,
     inputSchema: {
       type: 'object',
       properties: { title: { type: 'string', description: 'Kort namn på featuren.' }, body: { type: 'string' } },
